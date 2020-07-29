@@ -23,6 +23,7 @@ import org.gradle.api.artifacts.result.ResolvedComponentResult;
 import org.gradle.api.artifacts.result.ResolvedDependencyResult;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.internal.artifacts.ResolverResults;
+import org.gradle.api.internal.file.collections.ImmutableFileCollection;
 import org.gradle.api.internal.tasks.TaskDependencyContainer;
 import org.gradle.api.internal.tasks.WorkNodeAction;
 import org.gradle.internal.Factory;
@@ -83,8 +84,7 @@ public class DefaultExecutionGraphDependenciesResolver implements ExecutionGraph
         try {
             FileCollection files = selectedArtifacts(transformer);
             // Trigger resolution failure
-            files.getFiles();
-            return Try.successful(new DefaultArtifactTransformDependencies(files));
+            return Try.successful(new DefaultArtifactTransformDependencies(ImmutableFileCollection.of(files)));
         } catch (Exception e) {
             return Try.failure(e);
         }

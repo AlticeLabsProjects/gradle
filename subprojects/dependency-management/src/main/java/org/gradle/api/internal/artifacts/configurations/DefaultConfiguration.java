@@ -566,7 +566,8 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
                     .willBeRemovedInGradle7()
                     .withUserManual("viewing_debugging_dependencies", "sub:resolving-unsafe-configuration-resolution-errors")
                     .nagUser();
-                owner.getModel().withLenientState(() -> resolveExclusively(requestedState));
+//                owner.getModel().withLenientState(() -> resolveExclusively(requestedState));
+                throw new IllegalStateException("Attempting to resolve configuration " + identityPath + " from a thread that is not hold the lock for " + owner.getProject());
             }
         } else {
             resolveExclusively(requestedState);
@@ -710,7 +711,9 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
     }
 
     private ResolverResults getResultsForArtifacts() {
-        resolveExclusively(ARTIFACTS_RESOLVED);
+        if (resolvedState != ARTIFACTS_RESOLVED) {
+            resolveExclusively(ARTIFACTS_RESOLVED);
+        }
         return cachedResolverResults;
     }
 
