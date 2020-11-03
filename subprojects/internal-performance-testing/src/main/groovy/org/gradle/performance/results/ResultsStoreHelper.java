@@ -22,6 +22,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -34,6 +35,12 @@ public class ResultsStoreHelper {
             return ImmutableList.copyOf(Splitter.on(",").split(string));
         }
         return Collections.emptyList();
+    }
+
+    public static <T extends PerformanceTestResult> WritableResultsStore<T> createResultsStoreWhenDatabaseAvailable(Supplier<WritableResultsStore<T>> supplier) {
+        return PerformanceDatabase.isAvailable()
+            ? supplier.get()
+            : NoResultsStore.getInstance();
     }
 
     /**

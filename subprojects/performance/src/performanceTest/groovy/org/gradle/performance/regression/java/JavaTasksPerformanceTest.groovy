@@ -16,51 +16,39 @@
 
 package org.gradle.performance.regression.java
 
-import org.gradle.performance.AbstractCrossVersionGradleProfilerPerformanceTest
-import spock.lang.Unroll
+import org.gradle.performance.AbstractCrossVersionPerformanceTest
+import org.gradle.performance.annotations.RunFor
+import org.gradle.performance.annotations.Scenario
 
-import static org.gradle.performance.generator.JavaTestProject.LARGE_JAVA_MULTI_PROJECT
-import static org.gradle.performance.generator.JavaTestProject.LARGE_MONOLITHIC_JAVA_PROJECT
+import static org.gradle.performance.annotations.ScenarioType.TEST
+import static org.gradle.performance.results.OperatingSystem.LINUX
 
-class JavaTasksPerformanceTest extends AbstractCrossVersionGradleProfilerPerformanceTest {
+@RunFor(
+    @Scenario(type = TEST, operatingSystems = [LINUX], testProjects = ["largeJavaMultiProject", "largeMonolithicJavaProject"])
+)
+class JavaTasksPerformanceTest extends AbstractCrossVersionPerformanceTest {
 
-    @Unroll
-    def "tasks on #testProject"() {
+    def "tasks"() {
         given:
-        runner.testProject = testProject
-        runner.gradleOpts = ["-Xms${testProject.daemonMemory}", "-Xmx${testProject.daemonMemory}"]
         runner.tasksToRun = ['tasks']
-        runner.targetVersions = ["6.7-20200723220251+0000"]
+        runner.targetVersions = ["6.8-20201028230040+0000"]
 
         when:
         def result = runner.run()
 
         then:
         result.assertCurrentVersionHasNotRegressed()
-
-        where:
-        testProject                   | _
-        LARGE_MONOLITHIC_JAVA_PROJECT | _
-        LARGE_JAVA_MULTI_PROJECT      | _
     }
 
-    @Unroll
-    def "tasks --all on #testProject"() {
+    def "tasks --all"() {
         given:
-        runner.testProject = testProject
-        runner.gradleOpts = ["-Xms${testProject.daemonMemory}", "-Xmx${testProject.daemonMemory}"]
         runner.tasksToRun = ['tasks', '--all']
-        runner.targetVersions = ["6.7-20200723220251+0000"]
+        runner.targetVersions = ["6.8-20201028230040+0000"]
 
         when:
         def result = runner.run()
 
         then:
         result.assertCurrentVersionHasNotRegressed()
-
-        where:
-        testProject                   | _
-        LARGE_MONOLITHIC_JAVA_PROJECT | _
-        LARGE_JAVA_MULTI_PROJECT      | _
     }
 }

@@ -17,8 +17,11 @@
 package org.gradle.tooling.internal.provider.runner;
 
 import org.gradle.initialization.BuildEventConsumer;
-import org.gradle.internal.build.event.BuildEventSubscriptions;
 import org.gradle.internal.build.event.BuildEventListenerFactory;
+import org.gradle.internal.build.event.BuildEventSubscriptions;
+import org.gradle.internal.build.event.OperationResultPostProcessor;
+import org.gradle.internal.build.event.OperationResultPostProcessorFactory;
+import org.gradle.internal.operations.BuildOperationAncestryTracker;
 import org.gradle.internal.operations.BuildOperationDescriptor;
 import org.gradle.internal.operations.BuildOperationIdFactory;
 import org.gradle.internal.operations.BuildOperationListener;
@@ -27,7 +30,6 @@ import org.gradle.internal.operations.OperationIdentifier;
 import org.gradle.internal.operations.OperationProgressEvent;
 import org.gradle.internal.operations.OperationStartEvent;
 import org.gradle.tooling.events.OperationType;
-import org.gradle.internal.build.event.OperationResultPostProcessor;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -35,13 +37,14 @@ import java.util.List;
 import static java.util.Collections.emptyList;
 
 public class ToolingApiBuildEventListenerFactory implements BuildEventListenerFactory {
-
-    private final OperationResultPostProcessor operationResultPostProcessor;
+    private final BuildOperationAncestryTracker ancestryTracker;
     private final BuildOperationIdFactory idFactory;
+    private final List<OperationResultPostProcessorFactory> postProcessorFactories;
 
-    ToolingApiBuildEventListenerFactory(BuildOperationIdFactory idFactory, CompositeOperationResultPostProcessor compositeOperationResultPostProcessor) {
+    ToolingApiBuildEventListenerFactory(BuildOperationAncestryTracker ancestryTracker, BuildOperationIdFactory idFactory, List<OperationResultPostProcessorFactory> postProcessorFactories) {
+        this.ancestryTracker = ancestryTracker;
         this.idFactory = idFactory;
-        this.operationResultPostProcessor = compositeOperationResultPostProcessor;
+        this.postProcessorFactories = postProcessorFactories;
     }
 
     @Override
@@ -49,12 +52,11 @@ public class ToolingApiBuildEventListenerFactory implements BuildEventListenerFa
         if (!subscriptions.isAnyOperationTypeRequested()) {
             return emptyList();
         }
-        BuildOperationParentTracker parentTracker = new BuildOperationParentTracker();
-        ProgressEventConsumer progressEventConsumer = new ProgressEventConsumer(consumer, parentTracker);
+        ProgressEventConsumer progressEventConsumer = new ProgressEventConsumer(consumer, ancestryTracker);
         List<Object> listeners = new ArrayList<>();
-        listeners.add(parentTracker);
+        listeners.add(ancestryTracker);
         if (subscriptions.isRequested(OperationType.TEST)) {
-            BuildOperationListener buildListener = new ClientForwardingTestOperationListener(progressEventConsumer, subscriptions);
+            BuildOperationListener buildListener = new ClientForwardingTestOperationListener(progressEventConsumer, ancestryTracker, subscriptions);
             if (subscriptions.isRequested(OperationType.TEST_OUTPUT)) {
                 buildListener = new ClientForwardingTestOutputOperationListener(buildListener, progressEventConsumer, idFactory);
             }
@@ -74,7 +76,7 @@ public class ToolingApiBuildEventListenerFactory implements BuildEventListenerFa
                 operationDependenciesResolver.addLookup(transformOperationListener);
                 buildListener = transformOperationListener;
             }
-            PluginApplicationTracker pluginApplicationTracker = new PluginApplicationTracker(parentTracker);
+            PluginApplicationTracker pluginApplicationTracker = new PluginApplicationTracker(ancestryTracker);
             if (subscriptions.isAnyRequested(OperationType.PROJECT_CONFIGURATION, OperationType.TASK)) {
                 listeners.add(pluginApplicationTracker);
             }
@@ -83,11 +85,19 @@ public class ToolingApiBuildEventListenerFactory implements BuildEventListenerFa
                 if (subscriptions.isAnyRequested(OperationType.TASK)) {
                     listeners.add(taskOriginTracker);
                 }
-                ClientForwardingTaskOperationListener taskOperationListener = new ClientForwardingTaskOperationListener(progressEventConsumer, subscriptions, buildListener, operationResultPostProcessor, taskOriginTracker, operationDependenciesResolver);
+
+                List<OperationResultPostProcessor> postProcessors = new ArrayList<>(postProcessorFactories.size());
+                for (OperationResultPostProcessorFactory postProcessorFactory : postProcessorFactories) {
+                    postProcessors.addAll(postProcessorFactory.createProcessors(subscriptions, consumer));
+                }
+                listeners.addAll(postProcessors);
+                OperationResultPostProcessor postProcessor = new CompositeOperationResultPostProcessor(postProcessors);
+
+                ClientForwardingTaskOperationListener taskOperationListener = new ClientForwardingTaskOperationListener(progressEventConsumer, subscriptions, buildListener, postProcessor, taskOriginTracker, operationDependenciesResolver);
                 operationDependenciesResolver.addLookup(taskOperationListener);
                 buildListener = taskOperationListener;
             }
-            listeners.add(new ClientForwardingProjectConfigurationOperationListener(progressEventConsumer, subscriptions, buildListener, parentTracker, pluginApplicationTracker));
+            listeners.add(new ClientForwardingProjectConfigurationOperationListener(progressEventConsumer, subscriptions, buildListener, ancestryTracker, pluginApplicationTracker));
         }
         return listeners;
     }

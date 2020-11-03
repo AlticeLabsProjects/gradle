@@ -109,4 +109,8 @@ public class TestCountLogger implements TestListener {
     public boolean hadFailures() {
         return hadFailures;
     }
+
+    public long getTotalTests() {
+        return totalTests;
+    }
 }

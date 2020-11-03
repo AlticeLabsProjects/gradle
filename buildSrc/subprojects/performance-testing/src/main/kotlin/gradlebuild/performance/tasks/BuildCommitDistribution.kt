@@ -28,6 +28,7 @@ import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.TaskAction
 import org.gradle.caching.http.HttpBuildCache
+import org.gradle.internal.os.OperatingSystem
 import java.io.File
 
 
@@ -73,12 +74,13 @@ abstract class BuildCommitDistribution : DefaultTask() {
     fun getBuildCommands(): Array<String> {
         project.delete(commitDistributionHome.get().asFile)
         val buildCommands = mutableListOf(
-            "./gradlew",
+            "./gradlew" + (if (OperatingSystem.current().isWindows()) ".bat" else ""),
             "clean",
-            ":distributionsFull:install",
+            ":distributions-full:install",
             "-Pgradle_installPath=" + commitDistributionHome.get().asFile.absolutePath,
-            ":toolingApi:installToolingApiShadedJar",
-            "-PtoolingApiShadedJarInstallPath=" + commitDistributionToolingApiJar.get().asFile.absolutePath)
+            ":tooling-api:installToolingApiShadedJar",
+            "-PtoolingApiShadedJarInstallPath=" + commitDistributionToolingApiJar.get().asFile.absolutePath
+        )
 
         if (project.gradle.startParameter.isBuildCacheEnabled) {
             buildCommands.add("--build-cache")

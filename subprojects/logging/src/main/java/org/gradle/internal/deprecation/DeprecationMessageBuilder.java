@@ -26,6 +26,7 @@ import java.util.List;
 public class DeprecationMessageBuilder<T extends DeprecationMessageBuilder<T>> {
 
     private static final GradleVersion GRADLE7 = GradleVersion.version("7.0");
+    private static final GradleVersion GRADLE8 = GradleVersion.version("8.0");
 
     private String summary;
     private DeprecationTimeline deprecationTimeline;
@@ -58,10 +59,26 @@ public class DeprecationMessageBuilder<T extends DeprecationMessageBuilder<T>> {
     }
 
     /**
+     * Output: This is scheduled to be removed in Gradle 8.0.
+     */
+    public WithDeprecationTimeline willBeRemovedInGradle8() {
+        this.deprecationTimeline = DeprecationTimeline.willBeRemovedInVersion(GRADLE8);
+        return new WithDeprecationTimeline(this);
+    }
+
+    /**
      * Output: This will fail with an error in Gradle 7.0.
      */
     public WithDeprecationTimeline willBecomeAnErrorInGradle7() {
         this.deprecationTimeline = DeprecationTimeline.willBecomeAnErrorInVersion(GRADLE7);
+        return new WithDeprecationTimeline(this);
+    }
+
+    /**
+     * Output: This will fail with an error in Gradle 8.0.
+     */
+    public WithDeprecationTimeline willBecomeAnErrorInGradle8() {
+        this.deprecationTimeline = DeprecationTimeline.willBecomeAnErrorInVersion(GRADLE8);
         return new WithDeprecationTimeline(this);
     }
 
@@ -235,6 +252,12 @@ public class DeprecationMessageBuilder<T extends DeprecationMessageBuilder<T>> {
             return new WithDeprecationTimeline(this);
         }
 
+        @Override
+        public WithDeprecationTimeline willBeRemovedInGradle8() {
+            setDeprecationTimeline(DeprecationTimeline.willBeRemovedInVersion(GRADLE8));
+            return new WithDeprecationTimeline(this);
+        }
+
         public class WithDeprecationTimeline extends DeprecationMessageBuilder.WithDeprecationTimeline {
             private final DeprecateProperty builder;
 
@@ -265,6 +288,41 @@ public class DeprecationMessageBuilder<T extends DeprecationMessageBuilder<T>> {
         @Override
         String formatAdvice(String replacement) {
             return String.format("Please use the %s property instead.", replacement);
+        }
+    }
+
+    public static class DeprecateSystemProperty extends WithReplacement<String, DeprecateSystemProperty> {
+        private final String systemProperty;
+
+        DeprecateSystemProperty(String systemProperty) {
+            super(systemProperty);
+            this.systemProperty = systemProperty;
+            // This never happens in user code
+            setIndirectUsage();
+        }
+
+        /**
+         * Output: This is scheduled to be removed in Gradle 7.
+         */
+        @Override
+        public WithDeprecationTimeline willBeRemovedInGradle7() {
+            setDeprecationTimeline(DeprecationTimeline.willBeRemovedInVersion(GRADLE7));
+            return new WithDeprecationTimeline(this);
+        }
+
+        @Override
+        String formatSubject() {
+            return systemProperty;
+        }
+
+        @Override
+        String formatSummary(String property) {
+            return String.format("The %s system property has been deprecated.", property);
+        }
+
+        @Override
+        String formatAdvice(String replacement) {
+            return String.format("Please use the %s system property instead.", replacement);
         }
     }
 
@@ -434,6 +492,13 @@ public class DeprecationMessageBuilder<T extends DeprecationMessageBuilder<T>> {
          */
         public WithDeprecationTimeline willBeRemovedInGradle7() {
             setDeprecationTimeline(DeprecationTimeline.behaviourWillBeRemovedInVersion(GRADLE7));
+            return new WithDeprecationTimeline(this);
+        }
+        /**
+         * Output: This behaviour has been deprecated and is scheduled to be removed in Gradle 7.0.
+         */
+        public WithDeprecationTimeline willBeRemovedInGradle8() {
+            setDeprecationTimeline(DeprecationTimeline.behaviourWillBeRemovedInVersion(GRADLE8));
             return new WithDeprecationTimeline(this);
         }
 

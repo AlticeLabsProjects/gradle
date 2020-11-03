@@ -42,6 +42,7 @@ import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.SourceTask;
 import org.gradle.api.tasks.TaskAction;
 import org.gradle.api.tasks.VerificationTask;
+import org.gradle.internal.deprecation.DeprecationLogger;
 import org.gradle.internal.nativeintegration.console.ConsoleDetector;
 import org.gradle.internal.nativeintegration.console.ConsoleMetaData;
 import org.gradle.internal.nativeintegration.services.NativeServices;
@@ -68,15 +69,16 @@ public class Pmd extends SourceTask implements VerificationTask, Reporting<PmdRe
     private FileCollection ruleSetFiles;
     private final PmdReports reports;
     private boolean ignoreFailures;
-    private int rulePriority;
     private boolean consoleOutput;
     private FileCollection classpath;
+    private final Property<Integer> rulesMinimumPriority;
     private final Property<Integer> maxFailures;
     private final Property<Boolean> incrementalAnalysis;
 
     public Pmd() {
         ObjectFactory objects = getObjectFactory();
         reports = objects.newInstance(PmdReportsImpl.class, this);
+        this.rulesMinimumPriority = objects.property(Integer.class);
         this.incrementalAnalysis = objects.property(Boolean.class);
         this.maxFailures = objects.property(Integer.class);
     }
@@ -93,6 +95,7 @@ public class Pmd extends SourceTask implements VerificationTask, Reporting<PmdRe
 
     @TaskAction
     public void run() {
+        validate(rulesMinimumPriority.get());
         PmdInvoker.invoke(this);
     }
 
@@ -126,13 +129,13 @@ public class Pmd extends SourceTask implements VerificationTask, Reporting<PmdRe
     }
 
     /**
-     * Validates the value is a valid PMD RulePriority (1-5)
+     * Validates the value is a valid PMD rules minimum priority (1-5)
      *
-     * @param value rule priority threshold
+     * @param value rules minimum priority threshold
      */
     public static void validate(int value) {
         if (value > 5 || value < 1) {
-            throw new InvalidUserDataException(String.format("Invalid rulePriority '%d'.  Valid range 1 (highest) to 5 (lowest).", value));
+            throw new InvalidUserDataException(String.format("Invalid rulesMinimumPriority '%d'.  Valid range 1 (highest) to 5 (lowest).", value));
         }
     }
 
@@ -161,7 +164,7 @@ public class Pmd extends SourceTask implements VerificationTask, Reporting<PmdRe
     }
 
     /**
-     * The built-in rule sets to be used. See the <a href="https://pmd.github.io/pmd-6.23.0/pmd_rules_java.html">official list</a> of built-in rule sets.
+     * The built-in rule sets to be used. See the <a href="https://pmd.github.io/pmd-6.26.0/pmd_rules_java.html">official list</a> of built-in rule sets.
      *
      * <pre>
      *     ruleSets = ["basic", "braces"]
@@ -173,7 +176,7 @@ public class Pmd extends SourceTask implements VerificationTask, Reporting<PmdRe
     }
 
     /**
-     * The built-in rule sets to be used. See the <a href="https://pmd.github.io/pmd-6.23.0/pmd_rules_java.html">official list</a> of built-in rule sets.
+     * The built-in rule sets to be used. See the <a href="https://pmd.github.io/pmd-6.26.0/pmd_rules_java.html">official list</a> of built-in rule sets.
      *
      * <pre>
      *     ruleSets = ["basic", "braces"]
@@ -201,7 +204,7 @@ public class Pmd extends SourceTask implements VerificationTask, Reporting<PmdRe
     /**
      * The custom rule set to be used (if any). Replaces {@code ruleSetFiles}, except that it does not currently support multiple rule sets.
      *
-     * See the <a href="https://pmd.github.io/pmd-6.23.0/pmd_userdocs_making_rulesets.html">official documentation</a> for how to author a rule set.
+     * See the <a href="https://pmd.github.io/pmd-6.26.0/pmd_userdocs_making_rulesets.html">official documentation</a> for how to author a rule set.
      *
      * <pre>
      *     ruleSetConfig = resources.text.fromFile(resources.file("config/pmd/myRuleSets.xml"))
@@ -219,7 +222,7 @@ public class Pmd extends SourceTask implements VerificationTask, Reporting<PmdRe
     /**
      * The custom rule set to be used (if any). Replaces {@code ruleSetFiles}, except that it does not currently support multiple rule sets.
      *
-     * See the <a href="https://pmd.github.io/pmd-6.23.0/pmd_userdocs_making_rulesets.html">official documentation</a> for how to author a rule set.
+     * See the <a href="https://pmd.github.io/pmd-6.26.0/pmd_userdocs_making_rulesets.html">official documentation</a> for how to author a rule set.
      *
      * <pre>
      *     ruleSetConfig = resources.text.fromFile(resources.file("config/pmd/myRuleSets.xml"))
@@ -232,7 +235,7 @@ public class Pmd extends SourceTask implements VerificationTask, Reporting<PmdRe
     }
 
     /**
-     * The custom rule set files to be used. See the <a href="https://pmd.github.io/pmd-6.23.0/pmd_userdocs_making_rulesets.html">official documentation</a> for how to author a rule set file.
+     * The custom rule set files to be used. See the <a href="https://pmd.github.io/pmd-6.26.0/pmd_userdocs_making_rulesets.html">official documentation</a> for how to author a rule set file.
      * If you want to only use custom rule sets, you must clear {@code ruleSets}.
      *
      * <pre>
@@ -246,7 +249,7 @@ public class Pmd extends SourceTask implements VerificationTask, Reporting<PmdRe
     }
 
     /**
-     * The custom rule set files to be used. See the <a href="https://pmd.github.io/pmd-6.23.0/pmd_userdocs_making_rulesets.html">official documentation</a> for how to author a rule set file.
+     * The custom rule set files to be used. See the <a href="https://pmd.github.io/pmd-6.26.0/pmd_userdocs_making_rulesets.html">official documentation</a> for how to author a rule set file.
      * This adds to the default rule sets defined by {@link #getRuleSets()}.
      *
      * <pre>
@@ -309,12 +312,30 @@ public class Pmd extends SourceTask implements VerificationTask, Reporting<PmdRe
     /**
      * Specifies the rule priority threshold.
      *
-     * @since 2.8
-     * @see PmdExtension#getRulePriority()
+     * @see PmdExtension#getRulesMinimumPriority()
+     * @since 6.8
      */
+    @Incubating
     @Input
+    public Property<Integer> getRulesMinimumPriority() {
+        return rulesMinimumPriority;
+    }
+
+    /**
+     * Specifies the rule priority threshold.
+     *
+     * @see PmdExtension#getRulePriority()
+     * @since 2.8
+     */
+    @Internal
+    @Deprecated
     public int getRulePriority() {
-        return rulePriority;
+        DeprecationLogger.deprecateProperty(Pmd.class, "rulePriority")
+            .replaceWith("rulesMinimumPriority")
+            .willBeRemovedInGradle7()
+            .withDslReference()
+            .nagUser();
+        return rulesMinimumPriority.get();
     }
 
     /**
@@ -322,9 +343,14 @@ public class Pmd extends SourceTask implements VerificationTask, Reporting<PmdRe
      *
      * @since 2.8
      */
+    @Deprecated
     public void setRulePriority(int intValue) {
-        validate(intValue);
-        rulePriority = intValue;
+        DeprecationLogger.deprecateProperty(Pmd.class, "rulePriority")
+            .replaceWith("rulesMinimumPriority")
+            .willBeRemovedInGradle7()
+            .withDslReference()
+            .nagUser();
+        rulesMinimumPriority.set(intValue);
     }
 
     /**
@@ -378,7 +404,7 @@ public class Pmd extends SourceTask implements VerificationTask, Reporting<PmdRe
     /**
      * Controls whether to use incremental analysis or not.
      *
-     * This is only supported for PMD 6.0.0 or better. See <a href="https://pmd.github.io/pmd-6.23.0/pmd_userdocs_incremental_analysis.html"></a> for more details.
+     * This is only supported for PMD 6.0.0 or better. See <a href="https://pmd.github.io/pmd-6.26.0/pmd_userdocs_incremental_analysis.html"></a> for more details.
      *
      * @since 5.6
      */

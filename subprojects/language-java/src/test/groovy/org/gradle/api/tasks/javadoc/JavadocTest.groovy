@@ -18,7 +18,10 @@ package org.gradle.api.tasks.javadoc
 
 import org.apache.commons.io.FileUtils
 import org.gradle.api.internal.file.TestFiles
+import org.gradle.api.tasks.javadoc.internal.JavadocToolAdapter
 import org.gradle.jvm.internal.toolchain.JavaToolChainInternal
+import org.gradle.jvm.toolchain.JavaInstallationMetadata
+import org.gradle.jvm.toolchain.JavaLanguageVersion
 import org.gradle.language.base.internal.compile.Compiler
 import org.gradle.platform.base.internal.toolchain.ToolProvider
 import org.gradle.test.fixtures.AbstractProjectBuilderSpec
@@ -55,6 +58,24 @@ class JavadocTest extends AbstractProjectBuilderSpec {
         1 * toolChain.select(_) >> toolProvider
         1 * toolProvider.newCompiler(!null) >> generator
         1 * generator.execute(_)
+    }
+
+    def usesToolchainIfConfigured() {
+        def tool = Mock(JavadocToolAdapter)
+        def toolMetadata = Mock(JavaInstallationMetadata)
+        task.setDestinationDir(destDir)
+        task.source(srcDir)
+
+        when:
+        task.javadocTool.set(tool)
+
+        and:
+        execute(task)
+
+        then:
+        1 * tool.metadata >> toolMetadata
+        1 * toolMetadata.languageVersion >> JavaLanguageVersion.of(11)
+        1 * tool.execute(!null)
     }
 
     def executionWithOptionalAttributes() {

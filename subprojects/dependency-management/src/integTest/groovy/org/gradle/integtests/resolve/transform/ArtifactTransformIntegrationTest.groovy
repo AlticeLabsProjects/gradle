@@ -19,7 +19,7 @@ package org.gradle.integtests.resolve.transform
 import org.gradle.api.internal.artifacts.transform.ExecuteScheduledTransformationStepBuildOperationType
 import org.gradle.integtests.fixtures.AbstractHttpDependencyResolutionTest
 import org.gradle.integtests.fixtures.BuildOperationsFixture
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.internal.file.FileType
 import org.gradle.test.fixtures.maven.MavenFileRepository
 import org.hamcrest.Matcher
@@ -271,6 +271,105 @@ class ArtifactTransformIntegrationTest extends AbstractHttpDependencyResolutionT
 
         then:
         executed(":lib:jar1", ":lib:jar2", ":app:resolve")
+
+        and:
+        output.count("Transforming") == 0
+    }
+
+    def "can map artifact extension to implicit attributes"() {
+        given:
+        settingsFile << """
+            include 'app2'
+        """
+        taskTypeWithOutputFileProperty()
+        taskTypeLogsArtifactCollectionDetails()
+        buildFile << """
+            def contents = Attribute.of('contents', String)
+
+            project(':lib') {
+                task blueThing(type: FileProducer) {
+                    output = layout.buildDir.file('lib.blue')
+                }
+
+                artifacts {
+                    compile blueThing.output
+                }
+            }
+
+            project(':app') {
+
+                dependencies {
+                    compile project(':lib')
+                }
+
+                dependencies {
+                    artifactTypes {
+                        blue {
+                            attributes.attribute(contents, 'size')
+                        }
+                    }
+                }
+
+                task resolve(type: ShowArtifactCollection) {
+                    collection = configurations.compile.incoming.artifactView {
+                        attributes { it.attribute(contents, 'size') }
+                    }.artifacts
+                }
+            }
+            project(':app2') {
+
+                dependencies {
+                    compile project(':lib')
+                }
+
+                dependencies {
+                    artifactTypes {
+                        blue {
+                            attributes.attribute(contents, 'bin')
+                        }
+                    }
+                    registerTransform(FileSizer) {
+                        from.attribute(contents, 'bin')
+                        to.attribute(contents, 'size')
+                    }
+                }
+
+                task resolve(type: ShowArtifactCollection) {
+                    collection = configurations.compile.incoming.artifactView {
+                        attributes { it.attribute(contents, 'size') }
+                    }.artifacts
+                }
+            }
+        """
+
+        when:
+        run "resolve"
+
+        then:
+        executed(":lib:blueThing", ":app:resolve", ":app2:resolve")
+
+        and:
+        def appOutput = result.groupedOutput.task(':app:resolve')
+        appOutput.assertOutputContains("variants = [{artifactType=blue, contents=size, usage=api}]")
+        appOutput.assertOutputContains("components = [project :lib]")
+        appOutput.assertOutputContains("artifacts = [lib.blue (project :lib)]")
+        appOutput.assertOutputContains("files = [lib.blue]")
+
+        def app2Output = result.groupedOutput.task(':app2:resolve')
+        app2Output.assertOutputContains("variants = [{artifactType=blue, contents=size, usage=api}]")
+        app2Output.assertOutputContains("components = [project :lib]")
+        app2Output.assertOutputContains("artifacts = [lib.blue.txt (project :lib)]")
+        app2Output.assertOutputContains("files = [lib.blue.txt]")
+
+        and:
+        output.count("Transforming") == 1
+        output.count("Transforming lib.blue to lib.blue.txt") == 1
+
+        when:
+        run "resolve"
+
+        then:
+        executed(":lib:blueThing", ":app:resolve", ":app2:resolve")
 
         and:
         output.count("Transforming") == 0
@@ -1283,7 +1382,7 @@ Found the following transforms:
         output.count("Transforming") == 0
     }
 
-    @ToBeFixedForInstantExecution(because = "task that uses file collection containing transforms but does not declare this as an input may be encoded before the transform nodes it references")
+    @ToBeFixedForConfigurationCache(because = "task that uses file collection containing transforms but does not declare this as an input may be encoded before the transform nodes it references")
     def "transforms are created as required and a new instance created for each file"() {
         given:
         buildFile << """
@@ -1419,7 +1518,7 @@ Found the following transforms:
         outputContains("files: [b.jar]")
     }
 
-    @ToBeFixedForInstantExecution(because = "treating file collection visit failures as a configuration cache problem adds an additional failure to the build summary; exception chain is different when transform input cannot be resolved")
+    @ToBeFixedForConfigurationCache(because = "treating file collection visit failures as a configuration cache problem adds an additional failure to the build summary; exception chain is different when transform input cannot be resolved")
     def "user gets a reasonable error message when a transform input cannot be downloaded and proceeds with other inputs"() {
         def m1 = ivyHttpRepo.module("test", "test", "1.3")
             .artifact(type: 'jar', name: 'test-api')
@@ -1473,7 +1572,7 @@ Found the following transforms:
         outputContains("files: [test-api-1.3.jar.txt, test-impl2-1.3.jar.txt, test-2-0.1.jar.txt]")
     }
 
-    @ToBeFixedForInstantExecution(because = "treating file collection visit failures as a configuration cache problem adds an additional failure to the build summary; exception chain is different when transform input cannot be resolved")
+    @ToBeFixedForConfigurationCache(because = "treating file collection visit failures as a configuration cache problem adds an additional failure to the build summary; exception chain is different when transform input cannot be resolved")
     def "user gets a reasonable error message when file dependency cannot be listed and continues with other inputs"() {
         given:
         buildFile << """
@@ -1834,7 +1933,7 @@ Found the following transforms:
         failure.assertHasCause("broken")
     }
 
-    @ToBeFixedForInstantExecution(because = "treating file collection visit failures as a configuration cache problem adds an additional failure to the build summary; exception chain is different when transform input cannot be resolved")
+    @ToBeFixedForConfigurationCache(because = "treating file collection visit failures as a configuration cache problem adds an additional failure to the build summary; exception chain is different when transform input cannot be resolved")
     def "collects multiple failures"() {
         def m1 = mavenHttpRepo.module("test", "a", "1.3").publish()
         def m2 = mavenHttpRepo.module("test", "broken", "2.0").publish()
@@ -2019,13 +2118,9 @@ Found the following transforms:
         when:
         fails "resolve"
         then:
-        Matcher<String> matchesCannotIsolate = matchesRegexp("Cannot isolate parameters Custom\\\$Parameters_Decorated@.* of artifact transform Custom")
-        if (scheduled) {
-            failure.assertThatDescription(matchesCannotIsolate)
-        } else {
-            failure.assertHasDescription("Execution failed for task ':resolve'.")
-            failure.assertThatCause(matchesCannotIsolate)
-        }
+        Matcher<String> matchesCannotIsolate = matchesRegexp("Could not isolate parameters Custom\\\$Parameters_Decorated@.* of artifact transform Custom")
+        failure.assertHasDescription("Execution failed for task ':resolve'.")
+        failure.assertThatCause(matchesCannotIsolate)
         failure.assertHasCause("Could not serialize value of type CustomType")
 
         where:
@@ -2079,7 +2174,7 @@ Found the following transforms:
         outputContains("ids: [out-foo.txt (test:test:1.3), out-bar.txt (test:test:1.3)]")
     }
 
-    def "artifact excludes on different graphs are honored"() {
+    def "artifact excludes applied to external dependency on different graphs are honored"() {
         def m1 = ivyRepo.module("test", "test", "1.3")
         m1.artifact(name: "test-one", conf: "*")
         m1.artifact(name: "test-two", conf: "*")

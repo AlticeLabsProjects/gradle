@@ -19,6 +19,7 @@ import org.eclipse.jgit.api.Git
 import org.gradle.api.Action
 import org.gradle.integtests.fixtures.build.BuildTestFile
 import org.gradle.integtests.fixtures.build.BuildTestFixture
+import org.gradle.integtests.fixtures.configurationcache.ConfigurationCacheBuildOperationsFixture
 import org.gradle.integtests.fixtures.executer.ArtifactBuilder
 import org.gradle.integtests.fixtures.executer.ExecutionFailure
 import org.gradle.integtests.fixtures.executer.ExecutionResult
@@ -94,9 +95,9 @@ class AbstractIntegrationSpec extends Specification {
     def setup() {
         m2.isolateMavenLocalRepo(executer)
         executer.beforeExecute {
-            executer.withArgument("-Dorg.gradle.internal.repository.max.tentatives=$maxHttpRetries")
+            withArgument("-Dorg.gradle.internal.repository.max.tentatives=$maxHttpRetries")
             if (maxUploadAttempts != null) {
-                executer.withArgument("-Dorg.gradle.internal.network.retry.max.attempts=$maxUploadAttempts")
+                withArgument("-Dorg.gradle.internal.network.retry.max.attempts=$maxUploadAttempts")
             }
         }
     }
@@ -183,6 +184,10 @@ class AbstractIntegrationSpec extends Specification {
 
     protected TestNameTestDirectoryProvider getTestDirectoryProvider() {
         temporaryFolder
+    }
+
+    protected ConfigurationCacheBuildOperationsFixture newConfigurationCacheFixture() {
+        return new ConfigurationCacheBuildOperationsFixture(new BuildOperationsFixture(executer, temporaryFolder))
     }
 
     TestFile getTestDirectory() {
@@ -507,7 +512,7 @@ class AbstractIntegrationSpec extends Specification {
     }
 
     /**
-     * Called by {@link ToBeFixedForInstantExecutionExtension} when a test fails as expected so no further checks are applied.
+     * Called by {@link ToBeFixedForConfigurationCacheExtension} when a test fails as expected so no further checks are applied.
      */
     void ignoreCleanupAssertions() {
         this.ignoreCleanupAssertions = true

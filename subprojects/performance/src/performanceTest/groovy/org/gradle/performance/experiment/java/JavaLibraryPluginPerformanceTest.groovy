@@ -18,19 +18,21 @@ package org.gradle.performance.experiment.java
 
 import org.gradle.internal.os.OperatingSystem
 import org.gradle.performance.AbstractCrossBuildPerformanceTest
-import org.gradle.performance.categories.SlowPerformanceRegressionTest
+import org.gradle.performance.annotations.RunFor
+import org.gradle.performance.annotations.Scenario
 import org.gradle.performance.results.BaselineVersion
 import org.gradle.performance.results.CrossBuildPerformanceResults
-import org.junit.experimental.categories.Category
-import spock.lang.Unroll
 
-import static org.gradle.performance.generator.JavaTestProject.LARGE_JAVA_MULTI_PROJECT
+import static org.gradle.performance.annotations.ScenarioType.SLOW
+import static org.gradle.performance.results.OperatingSystem.LINUX
+import static org.gradle.performance.results.OperatingSystem.WINDOWS
 
-@Category(SlowPerformanceRegressionTest)
+@RunFor(
+    @Scenario(type = SLOW, operatingSystems = [LINUX, WINDOWS], testProjects = ["largeJavaMultiProject"])
+)
 class JavaLibraryPluginPerformanceTest extends AbstractCrossBuildPerformanceTest {
 
-    @Unroll
-    def "java-library vs java on #testProject"() {
+    def "java-library vs java"() {
         def javaLibraryRuns = "java-library-plugin"
         def javaRuns = "java-plugin"
         def compileClasspathPackaging = OperatingSystem.current().windows
@@ -38,17 +40,21 @@ class JavaLibraryPluginPerformanceTest extends AbstractCrossBuildPerformanceTest
         given:
         runner.testGroup = "java plugins"
         runner.buildSpec {
-            warmUpCount = warmUpRuns
-            invocationCount = runs
-            projectName(testProject.projectName).displayName(javaLibraryRuns).invocation {
-                tasksToRun("clean", "classes").args("-PcompileConfiguration", "-Dorg.gradle.java.compile-classpath-packaging=$compileClasspathPackaging").gradleOpts("-Xms${testProject.daemonMemory}", "-Xmx${testProject.daemonMemory}")
+            warmUpCount = 2
+            invocationCount = 3
+            displayName(javaLibraryRuns)
+            invocation {
+                tasksToRun("clean", "classes")
+                args("-PcompileConfiguration", "-Dorg.gradle.java.compile-classpath-packaging=$compileClasspathPackaging")
             }
         }
         runner.baseline {
-            warmUpCount = warmUpRuns
-            invocationCount = runs
-            projectName(testProject.projectName).displayName(javaRuns).invocation {
-                tasksToRun("clean", "classes").args("-PcompileConfiguration", "-PnoJavaLibraryPlugin").gradleOpts("-Xms${testProject.daemonMemory}", "-Xmx${testProject.daemonMemory}")
+            warmUpCount = 2
+            invocationCount = 3
+            displayName(javaRuns)
+            invocation {
+                tasksToRun("clean", "classes")
+                args("-PcompileConfiguration", "-PnoJavaLibraryPlugin")
             }
         }
 
@@ -63,11 +69,6 @@ class JavaLibraryPluginPerformanceTest extends AbstractCrossBuildPerformanceTest
         if (javaResults.significantlyFasterThan(javaLibraryResults, 0.95)) {
             throw new AssertionError(speedStats)
         }
-
-        where:
-        testProject                   | warmUpRuns | runs
-        LARGE_JAVA_MULTI_PROJECT      | 2          | 3
-        // HUGE_JAVA_MULTI_PROJECT    | 2          | 3
     }
 
     private static BaselineVersion buildBaselineResults(CrossBuildPerformanceResults results, String name) {

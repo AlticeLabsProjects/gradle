@@ -16,30 +16,39 @@
 
 package org.gradle.performance.results
 
-class NoResultsStore<T extends PerformanceTestResult> implements DataReporter<T>, ResultsStore {
+class NoResultsStore<T extends PerformanceTestResult> implements WritableResultsStore<T> {
 
-    @Override
-    void close() {
+    private static final INSTANCE = new NoResultsStore()
 
+    static <T extends PerformanceTestResult> WritableResultsStore<T> getInstance() {
+        return INSTANCE
     }
 
     @Override
     void report(T results) {
-
     }
 
     @Override
-    List<String> getTestNames() {
-        null
+    List<PerformanceExperiment> getPerformanceExperiments() {
+        []
     }
 
     @Override
-    PerformanceTestHistory getTestResults(String testName, String channel) {
-        null
+    PerformanceTestHistory getTestResults(PerformanceExperiment experiment, String channel) {
+        new EmptyPerformanceTestHistory(experiment)
     }
 
     @Override
-    PerformanceTestHistory getTestResults(String testName, int mostRecentN, int maxDaysOld, String channel) {
-        null
+    PerformanceTestHistory getTestResults(PerformanceExperiment experiment, int mostRecentN, int maxDaysOld, String channel) {
+        new EmptyPerformanceTestHistory(experiment)
+    }
+
+    @Override
+    Map<PerformanceExperimentOnOs, Long> getEstimatedExperimentDurationsInMillis() {
+        return Collections.emptyMap()
+    }
+
+    @Override
+    void close() {
     }
 }

@@ -36,6 +36,7 @@ import org.gradle.configuration.internal.TestListenerBuildOperationDecorator
 import org.gradle.execution.taskgraph.TaskExecutionGraphInternal
 import org.gradle.groovy.scripts.ScriptSource
 import org.gradle.initialization.ClassLoaderScopeRegistry
+import org.gradle.internal.management.DependencyResolutionManagementInternal
 import org.gradle.internal.build.DefaultPublicBuildPath
 import org.gradle.internal.build.PublicBuildPath
 import org.gradle.internal.enterprise.core.GradleEnterprisePluginManager
@@ -54,6 +55,8 @@ import org.gradle.util.GradleVersion
 import org.gradle.util.Path
 import org.gradle.util.TestUtil
 import spock.lang.Specification
+
+import java.util.function.Consumer
 
 class DefaultGradleSpec extends Specification {
     ServiceRegistryFactory serviceRegistryFactory = Stub(ServiceRegistryFactory)
@@ -84,6 +87,7 @@ class DefaultGradleSpec extends Specification {
         _ * serviceRegistry.get(ListenerBuildOperationDecorator) >> listenerBuildOperationDecorator
         _ * serviceRegistry.get(CrossProjectConfigurator) >> crossProjectConfigurator
         _ * serviceRegistry.get(PublicBuildPath) >> new DefaultPublicBuildPath(Path.ROOT)
+        _ * serviceRegistry.get(DependencyResolutionManagementInternal) >> Stub(DependencyResolutionManagementInternal)
         _ * serviceRegistry.get(GradleEnterprisePluginManager) >> new GradleEnterprisePluginManager()
 
         gradle = TestUtil.instantiatorFactory().decorateLenient().newInstance(DefaultGradle.class, null, parameter, serviceRegistryFactory)
@@ -432,7 +436,7 @@ class DefaultGradleSpec extends Specification {
         projectRegistry.addProject(project)
         _ * project.getProjectRegistry() >> projectRegistry
         _ * project.getMutationState() >> projectState
-        _ * projectState.withMutableState(_) >> { Runnable runnable -> runnable.run() }
+        _ * projectState.applyToMutableState(_) >> { Consumer consumer -> consumer.accept(project) }
         return project
     }
 

@@ -39,10 +39,13 @@ import org.gradle.api.tasks.TaskProvider;
 import org.gradle.api.tasks.application.CreateStartScripts;
 import org.gradle.api.tasks.bundling.Jar;
 import org.gradle.api.tasks.compile.JavaCompile;
+import org.gradle.jvm.toolchain.JavaToolchainService;
+import org.gradle.jvm.toolchain.JavaToolchainSpec;
 
 import java.io.File;
 import java.util.Collections;
 import java.util.concurrent.Callable;
+import java.util.function.BiFunction;
 
 import static org.gradle.api.distribution.plugins.DistributionPlugin.TASK_INSTALL_NAME;
 
@@ -161,7 +164,14 @@ public class ApplicationPlugin implements Plugin<Project> {
 
             JavaPluginExtension javaPluginExtension = project.getExtensions().getByType(JavaPluginExtension.class);
             run.getModularity().getInferModulePath().convention(javaPluginExtension.getModularity().getInferModulePath());
+            run.getJavaLauncher().convention(getToolchainTool(project, JavaToolchainService::launcherFor));
         });
+    }
+
+    private <T> Provider<T> getToolchainTool(Project project, BiFunction<JavaToolchainService, JavaToolchainSpec, Provider<T>> toolMapper) {
+        final JavaPluginExtension extension = project.getExtensions().getByType(JavaPluginExtension.class);
+        final JavaToolchainService service = project.getExtensions().getByType(JavaToolchainService.class);
+        return toolMapper.apply(service, extension.getToolchain());
     }
 
     // @Todo: refactor this task configuration to extend a copy task and use replace tokens

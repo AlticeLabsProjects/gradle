@@ -19,7 +19,7 @@ import org.gradle.api.internal.changedetection.TaskExecutionMode;
 import org.gradle.api.internal.tasks.TaskExecutionContext;
 import org.gradle.api.internal.tasks.properties.TaskProperties;
 import org.gradle.execution.plan.LocalTaskNode;
-import org.gradle.internal.operations.ExecutingBuildOperation;
+import org.gradle.internal.operations.BuildOperationContext;
 import org.gradle.internal.time.Time;
 import org.gradle.internal.time.Timer;
 
@@ -28,15 +28,16 @@ import java.util.Optional;
 public class DefaultTaskExecutionContext implements TaskExecutionContext {
 
     private final LocalTaskNode localTaskNode;
+    private final TaskProperties properties;
     private TaskExecutionMode taskExecutionMode;
-    private TaskProperties properties;
     private Long executionTime;
-    private ExecutingBuildOperation snapshotTaskInputsBuildOperation;
+    private BuildOperationContext snapshotTaskInputsBuildOperationContext;
 
     private final Timer executionTimer;
 
-    public DefaultTaskExecutionContext(LocalTaskNode localTaskNode) {
+    public DefaultTaskExecutionContext(LocalTaskNode localTaskNode, TaskProperties taskProperties) {
         this.localTaskNode = localTaskNode;
+        this.properties = taskProperties;
         this.executionTimer = Time.startTimer();
     }
 
@@ -65,24 +66,19 @@ public class DefaultTaskExecutionContext implements TaskExecutionContext {
     }
 
     @Override
-    public void setTaskProperties(TaskProperties properties) {
-        this.properties = properties;
-    }
-
-    @Override
     public TaskProperties getTaskProperties() {
         return properties;
     }
 
     @Override
-    public Optional<ExecutingBuildOperation> removeSnapshotTaskInputsBuildOperation() {
-        Optional<ExecutingBuildOperation> result = Optional.ofNullable(snapshotTaskInputsBuildOperation);
-        snapshotTaskInputsBuildOperation = null;
+    public Optional<BuildOperationContext> removeSnapshotTaskInputsBuildOperationContext() {
+        Optional<BuildOperationContext> result = Optional.ofNullable(snapshotTaskInputsBuildOperationContext);
+        snapshotTaskInputsBuildOperationContext = null;
         return result;
     }
 
     @Override
-    public void setSnapshotTaskInputsBuildOperation(ExecutingBuildOperation snapshotTaskInputsBuildOperation) {
-        this.snapshotTaskInputsBuildOperation = snapshotTaskInputsBuildOperation;
+    public void setSnapshotTaskInputsBuildOperationContext(BuildOperationContext snapshotTaskInputsBuildOperation) {
+        this.snapshotTaskInputsBuildOperationContext = snapshotTaskInputsBuildOperation;
     }
 }

@@ -16,20 +16,19 @@
 
 package org.gradle.performance.regression.kotlindsl
 
-import org.gradle.performance.AbstractCrossVersionGradleProfilerPerformanceTest
+import org.gradle.performance.AbstractCrossVersionPerformanceTest
 import org.junit.Ignore
 import spock.lang.Unroll
 
 @Ignore
-class GradleKotlinDslBuildPerformanceTest extends AbstractCrossVersionGradleProfilerPerformanceTest {
+class GradleKotlinDslBuildPerformanceTest extends AbstractCrossVersionPerformanceTest {
 
     @Unroll
     def "configuration of #testProject"() {
         given:
         runner.testProject = testProject
         runner.tasksToRun = ['help']
-        runner.gradleOpts = ["-Xms512m", "-Xmx512m"]
-        runner.targetVersions = ["6.7-20200723220251+0000"]
+        runner.targetVersions = ["6.8-20201028230040+0000"]
 
         when:
         def result = runner.run()
@@ -48,8 +47,7 @@ class GradleKotlinDslBuildPerformanceTest extends AbstractCrossVersionGradleProf
         given:
         runner.testProject = testProject
         runner.tasksToRun = ['help']
-        runner.gradleOpts = ["-Xms512m", "-Xmx512m"]
-        runner.targetVersions = ["6.7-20200723220251+0000"]
+        runner.targetVersions = ["6.8-20201028230040+0000"]
 
         when:
         def result = runner.run()

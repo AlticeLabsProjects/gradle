@@ -18,8 +18,8 @@ package org.gradle.kotlin.dsl.support.bytecode
 
 import kotlinx.metadata.Flag
 import kotlinx.metadata.Flags
+import kotlinx.metadata.KmAnnotation
 import kotlinx.metadata.KmFunctionVisitor
-import kotlinx.metadata.KmPackageExtensionVisitor
 import kotlinx.metadata.KmTypeVisitor
 import kotlinx.metadata.KmVariance
 import kotlinx.metadata.flagsOf
@@ -27,6 +27,7 @@ import kotlinx.metadata.jvm.JvmFunctionExtensionVisitor
 import kotlinx.metadata.jvm.JvmMethodSignature
 import kotlinx.metadata.jvm.JvmPackageExtensionVisitor
 import kotlinx.metadata.jvm.JvmPropertyExtensionVisitor
+import kotlinx.metadata.jvm.JvmTypeExtensionVisitor
 import kotlinx.metadata.jvm.KotlinClassHeader
 import kotlinx.metadata.jvm.KotlinClassMetadata
 import kotlinx.metadata.jvm.KotlinModuleMetadata
@@ -51,11 +52,13 @@ fun publicKotlinClass(
 
 
 internal
-fun writeFileFacadeClassHeader(fileFacadeWriter: KotlinClassMetadata.FileFacade.Writer.() -> Unit) =
-    beginFileFacadeClassHeader().run {
-        fileFacadeWriter()
-        closeHeader()
-    }
+fun writeFileFacadeClassHeader(
+    moduleName: String,
+    fileFacadeWriter: KotlinClassMetadata.FileFacade.Writer.() -> Unit
+) = beginFileFacadeClassHeader().run {
+    fileFacadeWriter()
+    closeHeader(moduleName)
+}
 
 
 internal
@@ -63,8 +66,9 @@ fun beginFileFacadeClassHeader() = KotlinClassMetadata.FileFacade.Writer()
 
 
 internal
-fun KotlinClassMetadata.FileFacade.Writer.closeHeader(): KotlinClassHeader {
-    (visitExtensions(JvmPackageExtensionVisitor.TYPE) as KmPackageExtensionVisitor).run {
+fun KotlinClassMetadata.FileFacade.Writer.closeHeader(moduleName: String): KotlinClassHeader {
+    (visitExtensions(JvmPackageExtensionVisitor.TYPE) as JvmPackageExtensionVisitor).run {
+        visitModuleName(moduleName)
         visitEnd()
     }
     visitEnd()
@@ -82,7 +86,7 @@ fun moduleMetadataBytesFor(fileFacades: List<InternalName>): ByteArray =
 
 
 internal
-fun moduleFileFor(baseDir: File, moduleName: String = baseDir.name) =
+fun moduleFileFor(baseDir: File, moduleName: String) =
     baseDir.resolve("META-INF").resolve("$moduleName.kotlin_module")
 
 
@@ -276,10 +280,25 @@ fun actionTypeOf(parameterType: KmTypeBuilder): KmTypeBuilder = {
 
 
 internal
-fun functionTypeOf(parameterType: KmTypeBuilder, returnType: KmTypeBuilder): KmTypeBuilder = {
+fun providerOfStar(): KmTypeBuilder = {
+    visitClass("org/gradle/api/provider/Provider")
+    visitStarProjection()
+}
+
+
+/**
+ * [receiverType].() -> [returnType]
+ */
+internal
+fun extensionFunctionTypeOf(receiverType: KmTypeBuilder, returnType: KmTypeBuilder): KmTypeBuilder = {
     visitClass("kotlin/Function1")
-    visitArgument(0, KmVariance.INVARIANT).with(parameterType)
+    visitArgument(0, KmVariance.INVARIANT).with(receiverType)
     visitArgument(0, KmVariance.INVARIANT).with(returnType)
+    (visitExtensions(JvmTypeExtensionVisitor.TYPE) as JvmTypeExtensionVisitor).run {
+        visit(false)
+        visitAnnotation(KmAnnotation(className = "kotlin/ExtensionFunctionType", arguments = emptyMap()))
+        visitEnd()
+    }
 }
 
 

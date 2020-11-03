@@ -16,6 +16,7 @@
 
 package org.gradle.api.internal.artifacts;
 
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ArtifactSetToFileCollectionFactory;
 import org.gradle.api.internal.artifacts.transform.ArtifactTransformListener;
 import org.gradle.api.internal.artifacts.transform.DefaultTransformationNodeRegistry;
 import org.gradle.api.internal.artifacts.transform.TransformationNodeDependencyResolver;
@@ -42,6 +43,12 @@ public class DependencyServices extends AbstractPluginServiceRegistry {
     }
 
     @Override
+    public void registerBuildSessionServices(ServiceRegistration registration) {
+        registration.add(ArtifactSetToFileCollectionFactory.class);
+        registration.addProvider(new DependencyManagementBuildSessionScopeServices());
+    }
+
+    @Override
     public void registerBuildTreeServices(ServiceRegistration registration) {
         registration.addProvider(new DependencyManagementBuildTreeScopeServices());
     }
@@ -57,8 +64,8 @@ public class DependencyServices extends AbstractPluginServiceRegistry {
             return listenerManager.getBroadcaster(ArtifactTransformListener.class);
         }
 
-        TransformationNodeRegistry createTransformationNodeRegistry(BuildOperationExecutor buildOperationExecutor, ArtifactTransformListener transformListener) {
-            return new DefaultTransformationNodeRegistry(buildOperationExecutor, transformListener);
+        TransformationNodeRegistry createTransformationNodeRegistry(BuildOperationExecutor buildOperationExecutor) {
+            return new DefaultTransformationNodeRegistry(buildOperationExecutor);
         }
 
         TransformationNodeDependencyResolver createTransformationNodeDependencyResolver() {

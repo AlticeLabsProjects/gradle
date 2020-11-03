@@ -42,6 +42,7 @@ class OutputFilterUtilTest extends Specification {
     final TestNameTestDirectoryProvider temporaryFolder = TestNameTestDirectoryProvider.newInstance(getClass())
 
     def virtualFileSystem = TestFiles.virtualFileSystem()
+    def fileSystemAccess = TestFiles.fileSystemAccess(virtualFileSystem)
 
     def "pre-existing directories are filtered"() {
         def outputDir = temporaryFolder.file("outputDir").createDir()
@@ -166,7 +167,7 @@ class OutputFilterUtilTest extends Specification {
     private FileSystemSnapshot snapshotOutput(File output) {
         virtualFileSystem.invalidateAll()
         MutableReference<CompleteFileSystemLocationSnapshot> result = MutableReference.empty()
-        virtualFileSystem.read(output.getAbsolutePath(), result.&set)
+        fileSystemAccess.read(output.getAbsolutePath(), result.&set)
         return result.get()
     }
 

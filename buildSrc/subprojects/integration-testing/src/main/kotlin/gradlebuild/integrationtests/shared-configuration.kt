@@ -38,7 +38,7 @@ import org.gradle.plugins.ide.idea.IdeaPlugin
 
 
 enum class TestType(val prefix: String, val executers: List<String>) {
-    INTEGRATION("integ", listOf("embedded", "forking", "noDaemon", "parallel", "instant", "watchFs")),
+    INTEGRATION("integ", listOf("embedded", "forking", "noDaemon", "parallel", "configCache", "watchFs")),
     CROSSVERSION("crossVersion", listOf("embedded", "forking"))
 }
 
@@ -49,7 +49,7 @@ fun Project.addDependenciesAndConfigurations(prefix: String) {
         val platformImplementation = findByName("platformImplementation")
 
         val distributionRuntimeOnly = bucket("${prefix}TestDistributionRuntimeOnly", "Declare the distribution that is required to run tests")
-        val localRepository = bucket("${prefix}TestLocalRepository", "Declare a local repository required as input data for the tests (e.g. :toolingApi)")
+        val localRepository = bucket("${prefix}TestLocalRepository", "Declare a local repository required as input data for the tests (e.g. :tooling-api)")
         val normalizedDistribution = bucket("${prefix}TestNormalizedDistribution", "Declare a normalized distribution (bin distribution without timestamp in version) to be used in tests")
         val binDistribution = bucket("${prefix}TestBinDistribution", "Declare a bin distribution to be used by tests - useful for testing the final distribution that is published")
         val allDistribution = bucket("${prefix}TestAllDistribution", "Declare a all distribution to be used by tests - useful for testing the final distribution that is published")
@@ -81,8 +81,8 @@ fun Project.addDependenciesAndConfigurations(prefix: String) {
     dependencies {
         "${prefix}TestRuntimeOnly"(project.the<ExternalModulesExtension>().junit5Vintage)
         if (name != "test") { // do not attempt to find projects during script compilation
-            "${prefix}TestImplementation"(project(":internalIntegTesting"))
-            "${prefix}TestFullDistributionRuntimeClasspath"(project(":distributionsFull"))
+            "${prefix}TestImplementation"(project(":internal-integ-testing"))
+            "${prefix}TestFullDistributionRuntimeClasspath"(project(":distributions-full"))
         }
     }
 }
@@ -108,14 +108,7 @@ fun Project.createTasks(sourceSet: SourceSet, testType: TestType) {
     // For all of the other executers, add an executer specific task
     testType.executers.forEach { executer ->
         val taskName = "$executer${prefix.capitalize()}Test"
-        val testTask = createTestTask(taskName, executer, sourceSet, testType, Action {
-            if (testType == TestType.CROSSVERSION) {
-                // the main crossVersion test tasks always only check the latest version,
-                // for true multi-version testing, we set up a test task per Gradle version,
-                // (see CrossVersionTestsPlugin).
-                systemProperties["org.gradle.integtest.versions"] = "default"
-            }
-        })
+        val testTask = createTestTask(taskName, executer, sourceSet, testType) {}
         if (executer == defaultExecuter) {
             // The test task with the default executer runs with 'check'
             tasks.named("check").configure { dependsOn(testTask) }
@@ -123,9 +116,9 @@ fun Project.createTasks(sourceSet: SourceSet, testType: TestType) {
     }
     // Create a variant of the test suite to force realization of component metadata
     if (testType == TestType.INTEGRATION) {
-        createTestTask(prefix + "ForceRealizeTest", defaultExecuter, sourceSet, testType, Action {
+        createTestTask(prefix + "ForceRealizeTest", defaultExecuter, sourceSet, testType) {
             systemProperties["org.gradle.integtest.force.realize.metadata"] = "true"
-        })
+        }
     }
 }
 

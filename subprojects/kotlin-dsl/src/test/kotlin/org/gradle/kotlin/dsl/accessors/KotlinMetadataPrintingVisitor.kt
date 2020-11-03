@@ -19,6 +19,10 @@ package org.gradle.kotlin.dsl.accessors
 import kotlinx.metadata.ClassName
 import kotlinx.metadata.Flags
 import kotlinx.metadata.KmAnnotation
+import kotlinx.metadata.KmContractVisitor
+import kotlinx.metadata.KmEffectInvocationKind
+import kotlinx.metadata.KmEffectType
+import kotlinx.metadata.KmEffectVisitor
 import kotlinx.metadata.KmExtensionType
 import kotlinx.metadata.KmFunctionExtensionVisitor
 import kotlinx.metadata.KmFunctionVisitor
@@ -26,12 +30,15 @@ import kotlinx.metadata.KmPackageExtensionVisitor
 import kotlinx.metadata.KmPackageVisitor
 import kotlinx.metadata.KmPropertyExtensionVisitor
 import kotlinx.metadata.KmPropertyVisitor
+import kotlinx.metadata.KmTypeAliasVisitor
 import kotlinx.metadata.KmTypeExtensionVisitor
 import kotlinx.metadata.KmTypeParameterExtensionVisitor
 import kotlinx.metadata.KmTypeParameterVisitor
 import kotlinx.metadata.KmTypeVisitor
 import kotlinx.metadata.KmValueParameterVisitor
 import kotlinx.metadata.KmVariance
+import kotlinx.metadata.KmVersionRequirementLevel
+import kotlinx.metadata.KmVersionRequirementVersionKind
 import kotlinx.metadata.KmVersionRequirementVisitor
 import kotlinx.metadata.jvm.JvmFieldSignature
 import kotlinx.metadata.jvm.JvmFunctionExtensionVisitor
@@ -41,11 +48,57 @@ import kotlinx.metadata.jvm.JvmPropertyExtensionVisitor
 import kotlinx.metadata.jvm.JvmTypeExtensionVisitor
 import kotlinx.metadata.jvm.JvmTypeParameterExtensionVisitor
 import kotlinx.metadata.jvm.KmModuleVisitor
+import kotlinx.metadata.jvm.KotlinClassHeader
+import kotlinx.metadata.jvm.KotlinClassMetadata
+import kotlinx.metadata.jvm.KotlinModuleMetadata
+import java.io.File
+
+
+internal
+fun dumpFileFacadeHeaderOf(loadClass: Class<*>) {
+    val fileFacadeHeader = loadClass.readKotlinClassHeader()
+    val metadata = KotlinClassMetadata.read(fileFacadeHeader) as KotlinClassMetadata.FileFacade
+    metadata.accept(KotlinMetadataPrintingVisitor.ForPackage)
+}
+
+
+internal
+fun Class<*>.readKotlinClassHeader(): KotlinClassHeader =
+    getAnnotation(Metadata::class.java).run {
+        KotlinClassHeader(
+            kind,
+            metadataVersion,
+            bytecodeVersion,
+            data1,
+            data2,
+            extraString,
+            packageName,
+            extraInt
+        )
+    }
+
+
+internal
+fun dumpMetadataOfModule(outputDir: File, moduleName: String) {
+    visitMetadataOfModule(outputDir, moduleName, KotlinMetadataPrintingVisitor.ForModule)
+}
+
+
+internal
+fun visitMetadataOfModule(outputDir: File, moduleName: String, visitor: KmModuleVisitor) {
+    val bytes = outputDir.resolve("META-INF/$moduleName.kotlin_module").readBytes()
+    val metadata = KotlinModuleMetadata.read(bytes)!!
+    metadata.accept(visitor)
+}
 
 
 object KotlinMetadataPrintingVisitor {
 
     object ForPackage : KmPackageVisitor() {
+        override fun visitTypeAlias(flags: Flags, name: String): KmTypeAliasVisitor? {
+            println("visitTypeAlias($flags, $name)")
+            return super.visitTypeAlias(flags, name)
+        }
 
         override fun visitExtensions(type: KmExtensionType): KmPackageExtensionVisitor? {
             println("visitExtensions($type)")
@@ -53,6 +106,11 @@ object KotlinMetadataPrintingVisitor {
                 override fun visitLocalDelegatedProperty(flags: Flags, name: String, getterFlags: Flags, setterFlags: Flags): KmPropertyVisitor? {
                     println("visitLocalDelegatedProperty($flags, $name, $getterFlags, $setterFlags)")
                     return super.visitLocalDelegatedProperty(flags, name, getterFlags, setterFlags)
+                }
+
+                override fun visitModuleName(name: String) {
+                    println("visitModuleName($name)")
+                    super.visitModuleName(name)
                 }
 
                 override fun visitEnd() {
@@ -95,12 +153,14 @@ object KotlinMetadataPrintingVisitor {
                             println("visitAnnotation($annotation)")
                             super.visitAnnotation(annotation)
                         }
+
                         override fun visitEnd() {
                             println("visitEnd()")
                             super.visitEnd()
                         }
                     }
                 }
+
                 override fun visitEnd() {
                     println("visitEnd()")
                     super.visitEnd()
@@ -115,11 +175,22 @@ object KotlinMetadataPrintingVisitor {
                     println("visit($signature)")
                     super.visit(signature)
                 }
+
+                override fun visitLambdaClassOriginName(internalName: String) {
+                    println("visitLambdaClassOriginName($internalName)")
+                    super.visitLambdaClassOriginName(internalName)
+                }
+
                 override fun visitEnd() {
                     println("visitEnd()")
                     super.visitEnd()
                 }
             }
+        }
+
+        override fun visitVersionRequirement(): KmVersionRequirementVisitor? {
+            println("visitVersionRequirement()")
+            return ForVersionRequirement
         }
 
         override fun visitReceiverParameterType(flags: Flags): KmTypeVisitor? {
@@ -147,6 +218,25 @@ object KotlinMetadataPrintingVisitor {
             return ForType
         }
 
+        override fun visitContract(): KmContractVisitor? {
+            println("visitContract()")
+            return object : KmContractVisitor() {
+                override fun visitEffect(type: KmEffectType, invocationKind: KmEffectInvocationKind?): KmEffectVisitor? {
+                    println("visitEffect($type, $invocationKind)")
+                    return object : KmEffectVisitor() {
+                        override fun visitEnd() {
+                            println("visitEnd()")
+                            super.visitEnd()
+                        }
+                    }
+                }
+
+                override fun visitEnd() {
+                    println("visitEnd()")
+                    super.visitEnd()
+                }
+            }
+        }
 
         override fun visitEnd() {
             println("visitEnd()")
@@ -189,7 +279,24 @@ object KotlinMetadataPrintingVisitor {
 
         override fun visitVersionRequirement(): KmVersionRequirementVisitor? {
             println("visitVersionRequirement()")
-            return super.visitVersionRequirement()
+            return ForVersionRequirement
+        }
+
+        override fun visitEnd() {
+            println("visitEnd()")
+            super.visitEnd()
+        }
+    }
+
+    object ForVersionRequirement : KmVersionRequirementVisitor() {
+        override fun visit(kind: KmVersionRequirementVersionKind, level: KmVersionRequirementLevel, errorCode: Int?, message: String?) {
+            println("visit($kind, $level, $errorCode, $message)")
+            super.visit(kind, level, errorCode, message)
+        }
+
+        override fun visitVersion(major: Int, minor: Int, patch: Int) {
+            println("visitVersion($major, $minor, $patch)")
+            super.visitVersion(major, minor, patch)
         }
 
         override fun visitEnd() {

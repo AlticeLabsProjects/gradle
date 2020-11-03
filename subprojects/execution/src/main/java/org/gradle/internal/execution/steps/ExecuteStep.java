@@ -20,30 +20,93 @@ import org.gradle.internal.Try;
 import org.gradle.internal.execution.ExecutionOutcome;
 import org.gradle.internal.execution.InputChangesContext;
 import org.gradle.internal.execution.Result;
+import org.gradle.internal.execution.Result.ExecutionResult;
 import org.gradle.internal.execution.Step;
 import org.gradle.internal.execution.UnitOfWork;
+import org.gradle.internal.operations.BuildOperationContext;
+import org.gradle.internal.operations.BuildOperationDescriptor;
+import org.gradle.internal.operations.BuildOperationExecutor;
+import org.gradle.internal.operations.BuildOperationType;
+import org.gradle.internal.operations.CallableBuildOperation;
+
+import javax.annotation.Nonnull;
 
 public class ExecuteStep<C extends InputChangesContext> implements Step<C, Result> {
 
-    @Override
-    public Result execute(C context) {
-        UnitOfWork work = context.getWork();
-        ExecutionOutcome outcome = context.getInputChanges()
-            .map(inputChanges -> determineOutcome(work.execute(inputChanges, context), inputChanges.isIncremental()))
-            .orElseGet(() -> determineOutcome(work.execute(null, context), false));
-        return () -> Try.successful(outcome);
+    private final BuildOperationExecutor buildOperationExecutor;
+
+    public ExecuteStep(BuildOperationExecutor buildOperationExecutor) {
+        this.buildOperationExecutor = buildOperationExecutor;
     }
 
-    private static ExecutionOutcome determineOutcome(UnitOfWork.WorkResult result, boolean incremental) {
-        switch (result) {
+    @Override
+    public Result execute(UnitOfWork work, C context) {
+        return buildOperationExecutor.call(new CallableBuildOperation<Result>() {
+            @Override
+            public Result call(BuildOperationContext operationContext) {
+                Result result = executeOperation(work, context);
+                operationContext.setResult(Operation.Result.INSTANCE);
+                return result;
+            }
+
+            @Override
+            public BuildOperationDescriptor.Builder description() {
+                return BuildOperationDescriptor
+                    .displayName("Executing " + work.getDisplayName())
+                    .details(Operation.Details.INSTANCE);
+            }
+        });
+    }
+
+    @Nonnull
+    private Result executeOperation(UnitOfWork work, C context) {
+        try {
+            ExecutionResult executionResult = context.getInputChanges()
+                .map(inputChanges -> determineResult(work.execute(inputChanges, context), inputChanges.isIncremental()))
+                .orElseGet(() -> determineResult(work.execute(null, context), false));
+            return () -> Try.successful(executionResult);
+        } catch (Throwable t) {
+            return () -> Try.failure(t);
+        }
+    }
+
+    private static ExecutionResult determineResult(UnitOfWork.WorkOutput workOutput, boolean incremental) {
+        ExecutionOutcome outcome;
+        switch (workOutput.getDidWork()) {
             case DID_NO_WORK:
-                return ExecutionOutcome.UP_TO_DATE;
+                outcome = ExecutionOutcome.UP_TO_DATE;
+                break;
             case DID_WORK:
-                return incremental
+                outcome = incremental
                     ? ExecutionOutcome.EXECUTED_INCREMENTALLY
                     : ExecutionOutcome.EXECUTED_NON_INCREMENTALLY;
+                break;
             default:
-                throw new IllegalArgumentException("Unknown result: " + result);
+                throw new AssertionError();
+        }
+        return new ExecutionResult() {
+            @Override
+            public ExecutionOutcome getOutcome() {
+                return outcome;
+            }
+
+            @Override
+            public Object getOutput() {
+                return workOutput.getOutput();
+            }
+        };
+    }
+
+    /*
+     * This operation is only used here temporarily. Should be replaced with a more stable operation in the long term.
+     */
+    public interface Operation extends BuildOperationType<Operation.Details, Operation.Result> {
+        interface Details {
+            Operation.Details INSTANCE = new Operation.Details() {};
+        }
+
+        interface Result {
+            Operation.Result INSTANCE = new Operation.Result() {};
         }
     }
 }

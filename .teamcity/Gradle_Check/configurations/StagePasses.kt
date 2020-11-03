@@ -2,7 +2,7 @@ package configurations
 
 import Gradle_Check.configurations.masterReleaseBranchFilter
 import Gradle_Check.configurations.triggerExcludes
-import common.Os
+import common.Os.LINUX
 import common.applyDefaultSettings
 import common.buildToolGradleParameters
 import common.gradleWrapper
@@ -11,6 +11,7 @@ import jetbrains.buildServer.configs.kotlin.v2019_2.BuildStep
 import jetbrains.buildServer.configs.kotlin.v2019_2.BuildType
 import jetbrains.buildServer.configs.kotlin.v2019_2.Dependencies
 import jetbrains.buildServer.configs.kotlin.v2019_2.FailureAction
+import jetbrains.buildServer.configs.kotlin.v2019_2.SnapshotDependency
 import jetbrains.buildServer.configs.kotlin.v2019_2.buildSteps.script
 import jetbrains.buildServer.configs.kotlin.v2019_2.triggers.ScheduleTrigger
 import jetbrains.buildServer.configs.kotlin.v2019_2.triggers.VcsTrigger
@@ -63,7 +64,7 @@ class StagePasses(model: CIBuildModel, stage: Stage, prevStage: Stage?, stagePro
     }
 
     params {
-        param("env.JAVA_HOME", buildJavaHome())
+        param("env.JAVA_HOME", LINUX.buildJavaHome())
     }
 
     val baseBuildType = this
@@ -71,13 +72,13 @@ class StagePasses(model: CIBuildModel, stage: Stage, prevStage: Stage?, stagePro
 
     val defaultGradleParameters = (
         buildToolGradleParameters() +
-            baseBuildType.buildCache.gradleParameters(Os.linux) +
+            baseBuildType.buildCache.gradleParameters(LINUX) +
             buildScanTags.map(::buildScanTag)
         ).joinToString(" ")
     steps {
         gradleWrapper {
             name = "GRADLE_RUNNER"
-            tasks = ":baseServices:createBuildReceipt" + if (stage.stageName == StageNames.READY_FOR_NIGHTLY) " updateBranchStatus -PgithubToken=%github.bot-teamcity.token%" else ""
+            tasks = ":base-services:createBuildReceipt" + if (stage.stageName == StageNames.READY_FOR_NIGHTLY) " updateBranchStatus -PgithubToken=%github.bot-teamcity.token%" else ""
             gradleParams = defaultGradleParameters
         }
         script {
@@ -97,7 +98,12 @@ class StagePasses(model: CIBuildModel, stage: Stage, prevStage: Stage?, stagePro
         }
 
         snapshotDependencies(stageProject.specificBuildTypes)
-        snapshotDependencies(stageProject.performanceTests)
+        snapshotDependencies(stageProject.performanceTests) { performanceTestPass ->
+            if (!performanceTestPass.performanceSpec.failsStage) {
+                onDependencyFailure = FailureAction.IGNORE
+                onDependencyCancel = FailureAction.IGNORE
+            }
+        }
         snapshotDependencies(stageProject.functionalTests)
     }
 })
@@ -108,10 +114,12 @@ fun stageTriggerId(model: CIBuildModel, stage: Stage) = stageTriggerId(model, st
 
 fun stageTriggerId(model: CIBuildModel, stageName: StageName) = AbsoluteId("${model.projectPrefix}Stage_${stageName.id}_Trigger")
 
-fun Dependencies.snapshotDependencies(buildTypes: Iterable<BuildType>) {
-    buildTypes.forEach {
-        dependency(it.id!!) {
-            snapshot {}
+fun <T : BuildType> Dependencies.snapshotDependencies(buildTypes: Iterable<T>, snapshotConfig: SnapshotDependency.(T) -> Unit = {}) {
+    buildTypes.forEach { buildType ->
+        dependency(buildType.id!!) {
+            snapshot {
+                snapshotConfig(buildType)
+            }
         }
     }
 }

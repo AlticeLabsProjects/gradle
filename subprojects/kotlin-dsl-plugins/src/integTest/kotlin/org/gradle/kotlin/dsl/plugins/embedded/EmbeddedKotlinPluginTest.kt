@@ -24,7 +24,7 @@ import org.gradle.api.logging.Logger
 
 import com.nhaarman.mockito_kotlin.inOrder
 import com.nhaarman.mockito_kotlin.mock
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 
 import org.hamcrest.CoreMatchers.containsString
 
@@ -35,10 +35,11 @@ import org.junit.Test
 class EmbeddedKotlinPluginTest : AbstractPluginTest() {
 
     @Test
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     fun `applies the kotlin plugin`() {
 
-        withBuildScript("""
+        withBuildScript(
+            """
 
             plugins {
                 `embedded-kotlin`
@@ -46,7 +47,8 @@ class EmbeddedKotlinPluginTest : AbstractPluginTest() {
 
             $repositoriesBlock
 
-        """)
+            """
+        )
 
         val result = build("assemble")
 
@@ -54,10 +56,11 @@ class EmbeddedKotlinPluginTest : AbstractPluginTest() {
     }
 
     @Test
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     fun `adds stdlib and reflect as compile only dependencies`() {
 
-        withBuildScript("""
+        withBuildScript(
+            """
 
             plugins {
                 `embedded-kotlin`
@@ -82,16 +85,18 @@ class EmbeddedKotlinPluginTest : AbstractPluginTest() {
                 }
             }
 
-        """)
+            """
+        )
 
         build("assertions")
     }
 
     @Test
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     fun `all embedded kotlin dependencies are resolvable`() {
 
-        withBuildScript("""
+        withBuildScript(
+            """
 
             plugins {
                 `embedded-kotlin`
@@ -101,14 +106,15 @@ class EmbeddedKotlinPluginTest : AbstractPluginTest() {
 
             dependencies {
                 ${dependencyDeclarationsFor(
-                    "implementation",
-                    listOf("compiler-embeddable", "scripting-compiler-embeddable", "scripting-compiler-impl-embeddable")
-                )}
+                "implementation",
+                listOf("compiler-embeddable", "scripting-compiler-embeddable", "scripting-compiler-impl-embeddable")
+            )}
             }
 
             configurations["compileClasspath"].files.map { println(it) }
 
-        """)
+            """
+        )
 
         val result = build("dependencies")
 
@@ -118,10 +124,11 @@ class EmbeddedKotlinPluginTest : AbstractPluginTest() {
     }
 
     @Test
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     fun `sources and javadoc of all embedded kotlin dependencies are resolvable`() {
 
-        withBuildScript("""
+        withBuildScript(
+            """
 
             plugins {
                 `embedded-kotlin`
@@ -164,7 +171,8 @@ class EmbeddedKotlinPluginTest : AbstractPluginTest() {
 
             printFileNamesOf<SourcesArtifact>()
             printFileNamesOf<JavadocArtifact>()
-        """)
+            """
+        )
 
         val result = build("help")
 
@@ -176,10 +184,11 @@ class EmbeddedKotlinPluginTest : AbstractPluginTest() {
     }
 
     @Test
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     fun `can add embedded dependencies to custom configuration`() {
 
-        withBuildScript("""
+        withBuildScript(
+            """
 
             plugins {
                 `embedded-kotlin`
@@ -191,7 +200,8 @@ class EmbeddedKotlinPluginTest : AbstractPluginTest() {
             customConfiguration.extendsFrom(configurations["embeddedKotlin"])
 
             configurations["customConfiguration"].files.map { println(it) }
-        """)
+            """
+        )
 
         val result = build("dependencies", "--configuration", "customConfiguration")
 
@@ -203,12 +213,13 @@ class EmbeddedKotlinPluginTest : AbstractPluginTest() {
 
     @Test
     @LeaksFileHandles("Kotlin Compiler Daemon working directory")
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     fun `can be used with embedded artifact-only repository`() {
 
         withDefaultSettings()
 
-        withBuildScript("""
+        withBuildScript(
+            """
 
             plugins {
                 `embedded-kotlin`
@@ -216,7 +227,8 @@ class EmbeddedKotlinPluginTest : AbstractPluginTest() {
 
             $repositoriesBlock
 
-        """)
+            """
+        )
 
         withFile("src/main/kotlin/source.kt", """var foo = "bar"""")
 

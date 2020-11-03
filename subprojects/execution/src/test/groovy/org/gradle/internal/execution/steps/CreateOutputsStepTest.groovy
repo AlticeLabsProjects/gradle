@@ -16,45 +16,59 @@
 
 package org.gradle.internal.execution.steps
 
+import org.gradle.api.internal.file.TestFiles
 import org.gradle.internal.execution.Result
 import org.gradle.internal.execution.UnitOfWork
+import org.gradle.internal.execution.WorkspaceContext
 import org.gradle.internal.file.TreeType
 
-class CreateOutputsStepTest extends ContextInsensitiveStepSpec {
+class CreateOutputsStepTest extends StepSpec<WorkspaceContext> {
     def step = new CreateOutputsStep<>(delegate)
 
+    @Override
+    protected WorkspaceContext createContext() {
+        Stub(WorkspaceContext)
+    }
+
     def "outputs are created"() {
+        given:
+        def outputDir = file("outDir")
+        def outputFile = file("parent/outFile")
+        def localStateFile = file("local-state/stateFile")
+        def destroyableFile = file("destroyable/file.txt")
+
         when:
-        step.execute(context)
+        step.execute(work, context)
 
         then:
-        _ * work.visitOutputProperties(_ as UnitOfWork.OutputPropertyVisitor) >> { UnitOfWork.OutputPropertyVisitor visitor ->
-            visitor.visitOutputProperty("dir", TreeType.DIRECTORY, file("outDir"))
-            visitor.visitOutputProperty("file", TreeType.FILE, file("parent/outFile"))
+        _ * work.visitOutputs(_ as File, _ as UnitOfWork.OutputVisitor) >> { File workspace, UnitOfWork.OutputVisitor visitor ->
+            visitor.visitOutputProperty("dir", TreeType.DIRECTORY, outputDir, TestFiles.fixed(outputDir))
+            visitor.visitOutputProperty("file", TreeType.FILE, outputFile, TestFiles.fixed(outputFile))
+            visitor.visitLocalState(localStateFile)
+            visitor.visitDestroyable(destroyableFile)
         }
 
         then:
-        file("outDir").isDirectory()
-
-        def outFile = file("parent/outFile")
-        outFile.parentFile.isDirectory()
-        !outFile.exists()
+        outputDir.assertIsEmptyDir()
+        outputFile.parentFile.assertIsEmptyDir()
+        localStateFile.parentFile.assertIsEmptyDir()
+        !destroyableFile.parentFile.exists()
 
         then:
-        1 * delegate.execute(context)
+        1 * delegate.execute(work, context)
         0 * _
     }
 
     def "result is preserved"() {
         def expected = Mock(Result)
         when:
-        def result = step.execute(context)
+        def result = step.execute(work, context)
 
         then:
         result == expected
 
-        _ * work.visitOutputProperties(_ as UnitOfWork.OutputPropertyVisitor)
-        1 * delegate.execute(context) >> expected
+        _ * work.visitOutputs(_ as File, _ as UnitOfWork.OutputVisitor)
+        1 * delegate.execute(work, context) >> expected
         0 * _
     }
 }

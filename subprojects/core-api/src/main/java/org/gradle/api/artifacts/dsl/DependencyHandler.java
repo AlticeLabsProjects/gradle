@@ -19,6 +19,7 @@ import groovy.lang.Closure;
 import org.gradle.api.Action;
 import org.gradle.api.Incubating;
 import org.gradle.api.artifacts.Dependency;
+import org.gradle.api.artifacts.ExternalModuleDependency;
 import org.gradle.api.artifacts.query.ArtifactResolutionQuery;
 import org.gradle.api.artifacts.transform.TransformAction;
 import org.gradle.api.artifacts.transform.TransformParameters;
@@ -26,6 +27,7 @@ import org.gradle.api.artifacts.transform.TransformSpec;
 import org.gradle.api.artifacts.type.ArtifactTypeContainer;
 import org.gradle.api.attributes.AttributesSchema;
 import org.gradle.api.plugins.ExtensionAware;
+import org.gradle.api.provider.Provider;
 
 import javax.annotation.Nullable;
 import java.util.Map;
@@ -185,14 +187,14 @@ import java.util.Map;
  * <h3>Project dependencies</h3>
  *
  * <p>To add a project dependency, you use the following notation:
- * <p><code><i>configurationName</i> project(':someProject')</code>
+ * <p><code><i>configurationName</i> project(':some-project')</code>
  *
- * <p>The notation <code>project(':projectA')</code> is similar to the syntax you use
+ * <p>The notation <code>project(':project-a')</code> is similar to the syntax you use
  * when configuring a projectA in a multi-module gradle project.
  *
  * <p>By default, when you declare dependency to projectA, you actually declare dependency to the 'default' configuration of the projectA.
  * If you need to depend on a specific configuration of projectA, use map notation for projects:
- * <p><code><i>configurationName</i> project(path: ':projectA', configuration: 'someOtherConfiguration')</code>
+ * <p><code><i>configurationName</i> project(path: ':project-a', configuration: 'someOtherConfiguration')</code>
  *
  * <p>Project dependencies are represented using a {@link org.gradle.api.artifacts.ProjectDependency}.
  *
@@ -286,6 +288,18 @@ public interface DependencyHandler extends ExtensionAware {
      * @return The dependency.
      */
     Dependency add(String configurationName, Object dependencyNotation, Closure configureClosure);
+
+    /**
+     * Adds a dependency provider to the given configuration, eventually configures the dependency using the given action.
+     *
+     * @param configurationName The name of the configuration.
+     * @param dependencyNotation The dependency provider notation, in one of the notations described above.
+     * @param configuration The action to use to configure the dependency.
+     *
+     * @since 6.8
+     */
+    @Incubating
+    <T, U extends ExternalModuleDependency> void addProvider(String configurationName, Provider<T> dependencyNotation, Action<? super U> configuration);
 
     /**
      * Creates a dependency without adding it to a configuration.

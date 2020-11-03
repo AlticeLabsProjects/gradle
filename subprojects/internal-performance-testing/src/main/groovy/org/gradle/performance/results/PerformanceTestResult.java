@@ -21,6 +21,8 @@ import java.util.List;
 
 public abstract class PerformanceTestResult {
     private String testId;
+    private String testClass;
+    private String testProject;
     private String teamCityBuildId;
     private String jvm;
     private String operatingSystem;
@@ -32,11 +34,6 @@ public abstract class PerformanceTestResult {
     private List<String> previousTestIds;
     private String versionUnderTest;
     private String channel;
-    private Throwable whereAmI;
-
-    public PerformanceTestResult() {
-        whereAmI = new Throwable();
-    }
 
     /**
      * Returns true if regression checks is enabled.
@@ -51,12 +48,32 @@ public abstract class PerformanceTestResult {
         return Arrays.asList("true", "all").contains(check);
     }
 
+    public PerformanceExperiment getPerformanceExperiment() {
+        return new PerformanceExperiment(testProject, new PerformanceScenario(testClass, testId));
+    }
+
+    public String getTestClass() {
+        return testClass;
+    }
+
+    public void setTestClass(String testClass) {
+        this.testClass = testClass;
+    }
+
     public String getTestId() {
         return testId;
     }
 
     public void setTestId(String testId) {
         this.testId = testId;
+    }
+
+    public String getTestProject() {
+        return testProject;
+    }
+
+    public void setTestProject(String testProject) {
+        this.testProject = testProject;
     }
 
     public String getTeamCityBuildId() {

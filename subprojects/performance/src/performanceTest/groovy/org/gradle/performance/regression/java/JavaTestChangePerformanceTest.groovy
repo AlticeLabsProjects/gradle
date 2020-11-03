@@ -16,39 +16,34 @@
 
 package org.gradle.performance.regression.java
 
-import org.gradle.performance.AbstractCrossVersionGradleInternalPerformanceTest
-import org.gradle.performance.mutator.ApplyNonAbiChangeToJavaSourceFileMutator
-import spock.lang.Unroll
+import org.gradle.performance.AbstractCrossVersionPerformanceTest
+import org.gradle.performance.annotations.RunFor
+import org.gradle.performance.annotations.Scenario
+import org.gradle.performance.fixture.JavaTestProject
+import org.gradle.profiler.mutations.ApplyNonAbiChangeToJavaSourceFileMutator
 
-import static org.gradle.performance.generator.JavaTestProject.LARGE_JAVA_MULTI_PROJECT
-import static org.gradle.performance.generator.JavaTestProject.LARGE_MONOLITHIC_JAVA_PROJECT
-import static org.gradle.performance.generator.JavaTestProject.MEDIUM_JAVA_MULTI_PROJECT_WITH_TEST_NG
+import static org.gradle.performance.annotations.ScenarioType.TEST
+import static org.gradle.performance.results.OperatingSystem.LINUX
 
-class JavaTestChangePerformanceTest extends AbstractCrossVersionGradleInternalPerformanceTest {
-
-    @Unroll
-    def "test for non-abi change on #testProject"() {
+@RunFor(
+    @Scenario(type = TEST, operatingSystems = [LINUX], testProjects = ["largeJavaMultiProject", "mediumJavaMultiProjectWithTestNG", "largeMonolithicJavaProject"])
+)
+class JavaTestChangePerformanceTest extends AbstractCrossVersionPerformanceTest {
+    def "test for non-abi change"() {
         given:
-        runner.testProject = testProject
-        runner.gradleOpts = ["-Xms${testProject.daemonMemory}", "-Xmx${testProject.daemonMemory}"]
-        runner.warmUpRuns = warmUpRuns
-        runner.runs = runs
+        def testProject = JavaTestProject.projectFor(runner.testProject)
+        runner.warmUpRuns = 2
+        runner.runs = 6
         runner.tasksToRun = ['test']
-        runner.addBuildExperimentListener(new ApplyNonAbiChangeToJavaSourceFileMutator(testProject.config.fileToChangeByScenario['test']))
-        runner.targetVersions = ["6.7-20200723220251+0000"]
+        runner.targetVersions = ["6.8-20201028230040+0000"]
+        // Pre-4.0 versions run into memory problems with this test
+        runner.minimumBaseVersion = "4.0"
+        runner.addBuildMutator { new ApplyNonAbiChangeToJavaSourceFileMutator(new File(it.projectDir, testProject.config.fileToChangeByScenario['test'])) }
 
         when:
         def result = runner.run()
 
         then:
         result.assertCurrentVersionHasNotRegressed()
-
-        where:
-        testProject                            | warmUpRuns | runs
-        LARGE_JAVA_MULTI_PROJECT               | 2          | 6
-        MEDIUM_JAVA_MULTI_PROJECT_WITH_TEST_NG | 2          | 6
-        LARGE_MONOLITHIC_JAVA_PROJECT          | 2          | 6
-
-        //monolithicJavaTestNGProject" - testNG requires more test workers, which take too long to start up
     }
 }

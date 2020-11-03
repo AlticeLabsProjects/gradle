@@ -16,16 +16,23 @@
 
 package org.gradle.performance.regression.corefeature
 
-import org.gradle.performance.AbstractCrossVersionGradleProfilerPerformanceTest
+import org.gradle.performance.AbstractCrossVersionPerformanceTest
+import org.gradle.performance.annotations.RunFor
+import org.gradle.performance.annotations.Scenario
 
-class ArchiveTreePerformanceTest extends AbstractCrossVersionGradleProfilerPerformanceTest {
+import static org.gradle.performance.annotations.ScenarioType.TEST
+import static org.gradle.performance.results.OperatingSystem.LINUX
+
+@RunFor(
+    @Scenario(type = TEST, operatingSystems = [LINUX], testProjects = ["archivePerformanceProject"])
+)
+class ArchiveTreePerformanceTest extends AbstractCrossVersionPerformanceTest {
     def setup() {
-        runner.targetVersions = ["6.7-20200723220251+0000"]
+        runner.targetVersions = ["6.8-20201028230040+0000"]
     }
 
     def "visiting zip trees"() {
         given:
-        runner.testProject = "archivePerformanceProject"
         runner.tasksToRun = ['visitZip']
 
         when:
@@ -34,9 +41,9 @@ class ArchiveTreePerformanceTest extends AbstractCrossVersionGradleProfilerPerfo
         then:
         result.assertCurrentVersionHasNotRegressed()
     }
+
     def "visiting tar trees"() {
         given:
-        runner.testProject = "archivePerformanceProject"
         runner.tasksToRun = ['visitTar']
 
         when:
@@ -48,7 +55,6 @@ class ArchiveTreePerformanceTest extends AbstractCrossVersionGradleProfilerPerfo
 
     def "visiting gzip tar trees"() {
         given:
-        runner.testProject = "archivePerformanceProject"
         runner.tasksToRun = ['visitTarGz']
 
         when:

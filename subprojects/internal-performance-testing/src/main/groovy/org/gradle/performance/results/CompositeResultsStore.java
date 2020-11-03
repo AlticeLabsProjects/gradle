@@ -18,54 +18,61 @@ package org.gradle.performance.results;
 
 import org.gradle.internal.concurrent.CompositeStoppable;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class CompositeResultsStore implements ResultsStore {
     private final List<ResultsStore> stores;
-    private Map<String, ResultsStore> tests;
+    private Map<PerformanceExperiment, ResultsStore> tests;
 
     public CompositeResultsStore(ResultsStore... stores) {
         this.stores = Arrays.asList(stores);
     }
 
     @Override
-    public List<String> getTestNames() {
+    public List<PerformanceExperiment> getPerformanceExperiments() {
         buildTests();
         return new ArrayList<>(tests.keySet());
     }
 
     @Override
-    public PerformanceTestHistory getTestResults(String testName, String channel) {
-        return getStoreForTest(testName).getTestResults(testName, channel);
+    public PerformanceTestHistory getTestResults(PerformanceExperiment experiment, String channel) {
+        return getStoreForTest(experiment).getTestResults(experiment, channel);
     }
 
     @Override
-    public PerformanceTestHistory getTestResults(String testName, int mostRecentN, int maxDaysOld, String channel) {
-        return getStoreForTest(testName).getTestResults(testName, mostRecentN, maxDaysOld, channel);
+    public PerformanceTestHistory getTestResults(PerformanceExperiment experiment, int mostRecentN, int maxDaysOld, String channel) {
+        return getStoreForTest(experiment).getTestResults(experiment, mostRecentN, maxDaysOld, channel);
     }
 
-    private ResultsStore getStoreForTest(String testName) {
+    @Override
+    public Map<PerformanceExperimentOnOs, Long> getEstimatedExperimentDurationsInMillis() {
+        return stores.stream()
+            .flatMap(store -> store.getEstimatedExperimentDurationsInMillis().entrySet().stream())
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, Math::max, LinkedHashMap::new));
+    }
+
+    private ResultsStore getStoreForTest(PerformanceExperiment experiment) {
         buildTests();
-        if (!tests.containsKey(testName)) {
-            throw new IllegalArgumentException(String.format("Unknown test '%s'.", testName));
+        if (!tests.containsKey(experiment)) {
+            throw new IllegalArgumentException(String.format("Unknown test '%s'.", experiment));
         }
-        return tests.get(testName);
+        return tests.get(experiment);
     }
 
     private void buildTests() {
         if (tests == null) {
-            Map<String, ResultsStore> tests = new LinkedHashMap<>();
+            Map<PerformanceExperiment, ResultsStore> tests = new LinkedHashMap<>();
             for (ResultsStore store : stores) {
-                for (String testName : store.getTestNames()) {
-                    if (tests.containsKey(testName)) {
-                        throw new IllegalArgumentException(String.format("Duplicate test '%s'", testName));
+                for (PerformanceExperiment experiment : store.getPerformanceExperiments()) {
+                    if (tests.containsKey(experiment)) {
+                        throw new IllegalArgumentException(String.format("Duplicate test '%s'", experiment));
                     }
-                    tests.put(testName, store);
+                    tests.put(experiment, store);
                 }
             }
             this.tests = tests;
@@ -73,7 +80,7 @@ public class CompositeResultsStore implements ResultsStore {
     }
 
     @Override
-    public void close() throws IOException {
+    public void close() {
         CompositeStoppable.stoppable(stores).stop();
     }
 }

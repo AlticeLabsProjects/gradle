@@ -351,6 +351,8 @@ By default, repositories include everything and exclude nothing:
 * If you declare both includes and excludes, then it includes only what is explicitly included and not excluded.
 
 It is possible to filter either by explicit _group_, _module_ or _version_, either strictly or using regular expressions.
+When using a strict version, it is possible to use a version range, using <<single_versions.adoc#,the format supported>> by Gradle.
+In addition, there are filtering options by resolution context: configuration name or even configuration attributes.
 See link:{javadocPath}/org/gradle/api/artifacts/repositories/RepositoryContentDescriptor.html[RepositoryContentDescriptor] for details.
 
 === Declaring content exclusively found in one repository
@@ -406,7 +408,7 @@ In that case, the order of checking for sources is predefined.
 
 The following metadata sources are supported:
 
-.Repository transport protocols
+.Supported metadata sources
 [%header%autowidth,compact]
 |===
 | Metadata source | Description | Order | Maven | Ivy / flat dir
@@ -475,6 +477,49 @@ However, for different reasons, there are plugins available in other, public or 
 When a build requires one of these plugins, additional repositories need to be specified so that Gradle knows where to search.
 
 As the way to declare the repositories and what they are expected to contain depends on the way the plugin is applied, it is best to refer to <<plugins.adoc#sec:custom_plugin_repositories, Custom Plugin Repositories>>.
+
+[[sub:centralized-repository-declaration]]
+== Centralizing repositories declaration
+
+Instead of declaring repositories in every subproject of your build or via an `allprojects` block, Gradle offers a way to declare them in a central place for all project.
+
+NOTE: Central declaration of repositories is an incubating feature
+
+Repositories used by convention by every subproject can be declared in the `settings.gradle(.kts)` file:
+
+.Declaring a Maven repository in settings
+====
+include::sample[dir="snippets/artifacts/defineRepositoryInSettings/groovy",files="settings.gradle[tags=declare_repositories_settings]"]
+include::sample[dir="snippets/artifacts/defineRepositoryInSettings/kotlin",files="settings.gradle.kts[tags=declare_repositories_settings]"]
+====
+
+The `dependencyResolutionManagement` repositories block accepts the same notations as in a project, which includes Maven or Ivy repositories, with or without credentials, etc.
+
+By default, repositories declared by a project will *override* whatever is declared in settings.
+You can change this behavior to make sure that you always use the settings repositories:
+
+.Preferring settings repositories
+====
+include::sample[dir="snippets/artifacts/defineRepositoryInSettings/groovy",files="settings.gradle[tags=prefer_settings]"]
+include::sample[dir="snippets/artifacts/defineRepositoryInSettings/kotlin",files="settings.gradle.kts[tags=prefer_settings]"]
+====
+
+If, for some reason, a project or a plugin declares a repository in a project, Gradle would warn you.
+You can however make it _fail the build_ if you want to enforce that only settings repositories are used:
+
+.Enforcing settings repositories
+====
+include::sample[dir="snippets/artifacts/defineRepositoryInSettings/groovy",files="settings.gradle[tags=enforce_settings]"]
+include::sample[dir="snippets/artifacts/defineRepositoryInSettings/kotlin",files="settings.gradle.kts[tags=enforce_settings]"]
+====
+
+Eventually, the default is equivalent to calling `preferProjectRepositories`:
+
+.Preferring project repositories
+====
+include::sample[dir="snippets/artifacts/defineRepositoryInSettings/groovy",files="settings.gradle[tags=prefer_projects]"]
+include::sample[dir="snippets/artifacts/defineRepositoryInSettings/kotlin",files="settings.gradle.kts[tags=prefer_projects]"]
+====
 
 [[sec:supported_transport_protocols]]
 == Supported repository transport protocols
@@ -751,6 +796,6 @@ publishing credentials to be present. On the other hand, if the build needs to e
 at some point, Gradle will check for credential presence first thing and will not start running any of the tasks
 if it knows that the build will fail at a later point because of missing credentials.
 
-Here is a link:{samplesPath}/sample_publishing_credentials.html[downloadable sample] that demonstrates the concept in more detail.
+Here is a link:../samples/sample_publishing_credentials.html[downloadable sample] that demonstrates the concept in more detail.
 
 The same rules apply for supplying link:{javadocPath}/org/gradle/api/credentials/AwsCredentials.html[AwsCredentials].

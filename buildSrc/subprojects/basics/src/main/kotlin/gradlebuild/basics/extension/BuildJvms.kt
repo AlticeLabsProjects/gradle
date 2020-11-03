@@ -47,6 +47,12 @@ abstract class BuildJvms(javaInstallationRegistry: JavaInstallationRegistry, tes
             throw IllegalStateException("Must use $productionJdkName to perform this build. Is currently ${buildInstallation.vendorAndMajorVersion()} at ${buildInstallation.installationDirectory}.")
         }
     }
+
+    fun whenTestingWithEarlierThan(version: JavaVersion, action: (jvm: JavaInstallation) -> Unit) {
+        if (testJvm.map { it.javaVersion < version }.get()) {
+            action(testJvm.get())
+        }
+    }
 }
 
 

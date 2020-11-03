@@ -1,7 +1,7 @@
 import Gradle_Check.model.CROSS_VERSION_BUCKETS
-import Gradle_Check.model.GradleBuildBucketProvider
+import Gradle_Check.model.FunctionalTestBucketProvider
 import Gradle_Check.model.JsonBasedGradleSubprojectProvider
-import Gradle_Check.model.StatisticBasedGradleBuildBucketProvider
+import Gradle_Check.model.StatisticBasedFunctionalTestBucketProvider
 import Gradle_Check.model.ignoredSubprojects
 import common.JvmVendor
 import common.JvmVersion
@@ -10,6 +10,7 @@ import configurations.FunctionalTest
 import configurations.StagePasses
 import jetbrains.buildServer.configs.kotlin.v2019_2.Project
 import jetbrains.buildServer.configs.kotlin.v2019_2.buildSteps.GradleBuildStep
+import jetbrains.buildServer.configs.kotlin.v2019_2.failureConditions.BuildFailureOnText
 import model.CIBuildModel
 import model.GradleSubproject
 import model.Stage
@@ -28,7 +29,7 @@ import java.io.File
 class CIConfigIntegrationTests {
     private val subprojectProvider = JsonBasedGradleSubprojectProvider(File("../.teamcity/subprojects.json"))
     private val model = CIBuildModel(buildScanTags = listOf("Check"), subprojects = subprojectProvider)
-    private val gradleBuildBucketProvider = StatisticBasedGradleBuildBucketProvider(model, File("./test-class-data.json").absoluteFile)
+    private val gradleBuildBucketProvider = StatisticBasedFunctionalTestBucketProvider(model, File("./test-class-data.json").absoluteFile)
     private val rootProject = RootProject(model, gradleBuildBucketProvider)
 
     private
@@ -36,7 +37,7 @@ class CIConfigIntegrationTests {
 
     @Test
     fun configurationTreeCanBeGenerated() {
-        assertEquals(rootProject.subProjects.size, model.stages.size + 1)
+        assertEquals(rootProject.subProjects.size, model.stages.size)
         assertEquals(rootProject.buildTypes.size, model.stages.size)
     }
 
@@ -55,7 +56,7 @@ class CIConfigIntegrationTests {
         val macOS = readyForRelease.subProjects.find { it.name.contains("Macos") }!!
 
         macOS.buildTypes.forEach { buildType ->
-            assertFalse(Os.macos.ignoredSubprojects.any { subProject ->
+            assertFalse(Os.MACOS.ignoredSubprojects.any { subProject ->
                 buildType.name.endsWith("($subProject)")
             })
         }
@@ -97,9 +98,9 @@ class CIConfigIntegrationTests {
         }
     }
 
-    class SubProjectBucketProvider(private val model: CIBuildModel) : GradleBuildBucketProvider {
-        override fun createFunctionalTestsFor(stage: Stage, testConfig: TestCoverage) =
-            model.subprojects.subprojects.map { it.createFunctionalTestsFor(model, stage, testConfig, Int.MAX_VALUE) }
+    class SubProjectBucketProvider(private val model: CIBuildModel) : FunctionalTestBucketProvider {
+        override fun createFunctionalTestsFor(stage: Stage, testCoverage: TestCoverage) =
+            model.subprojects.subprojects.map { it.createFunctionalTestsFor(model, stage, testCoverage, Int.MAX_VALUE) }
 
         override fun createDeferredFunctionalTestsFor(stage: Stage) = emptyList<FunctionalTest>()
     }
@@ -203,14 +204,24 @@ class CIConfigIntegrationTests {
     fun onlyReadyForNightlyTriggerHasUpdateBranchStatus() {
         val triggerNameToTasks = rootProject.buildTypes.map { it.uuid to ((it as StagePasses).steps.items[0] as GradleBuildStep).tasks }.toMap()
         val readyForNightlyId = toTriggerId("MasterAccept")
-        assertEquals(":baseServices:createBuildReceipt updateBranchStatus -PgithubToken=%github.bot-teamcity.token%", triggerNameToTasks[readyForNightlyId])
+        assertEquals(":base-services:createBuildReceipt updateBranchStatus -PgithubToken=%github.bot-teamcity.token%", triggerNameToTasks[readyForNightlyId])
         val otherTaskNames = triggerNameToTasks.filterKeys { it != readyForNightlyId }.values.toSet()
-        assertEquals(setOf(":baseServices:createBuildReceipt"), otherTaskNames)
+        assertEquals(setOf(":base-services:createBuildReceipt"), otherTaskNames)
+    }
+
+    @Test
+    fun buildsContainFailureConditionForPotentialCredentialsLeaks() {
+        val allBuildTypes = rootProject.subProjects.flatMap { it.buildTypes }
+        allBuildTypes.forEach {
+            val credentialLeakCondition = it.failureConditions.items.find { it.type.equals("BuildFailureOnMessage") } as BuildFailureOnText
+            assertTrue(credentialLeakCondition.enabled)
+            assertTrue(credentialLeakCondition.stopBuildOnFailure!!)
+        }
     }
 
     private fun toTriggerId(id: String) = "Gradle_Check_Stage_${id}_Trigger"
     private fun subProjectFolderList(): List<File> {
-        val subProjectFolders = File("../subprojects").listFiles().filter { it.isDirectory }
+        val subProjectFolders = File("../subprojects").listFiles()!!.filter { it.isDirectory }
         assertFalse(subProjectFolders.isEmpty())
         return subProjectFolders
     }
@@ -251,7 +262,7 @@ class CIConfigIntegrationTests {
         val projectsWithUnitTests = model.subprojects.subprojects.filter { it.unitTests }
         val projectFoldersWithUnitTests = subProjectFolderList().filter {
             File(it, "src/test").exists() &&
-                it.name != "architecture-test" // architectureTest:test is part of Sanity Check
+                it.name != "architecture-test" // architecture-test:test is part of Sanity Check
         }
         assertFalse(projectFoldersWithUnitTests.isEmpty())
         projectFoldersWithUnitTests.forEach {
@@ -307,7 +318,7 @@ class CIConfigIntegrationTests {
 
     @Test
     fun long_ids_are_shortened() {
-        val testCoverage = TestCoverage(1, TestType.quickFeedbackCrossVersion, Os.windows, JvmVersion.java11, JvmVendor.oracle)
+        val testCoverage = TestCoverage(1, TestType.quickFeedbackCrossVersion, Os.WINDOWS, JvmVersion.java11, JvmVendor.oracle)
         val shortenedId = testCoverage.asConfigurationId(model, "veryLongSubprojectNameLongerThanEverythingWeHave")
         assertTrue(shortenedId.length < 80)
         assertEquals("Gradle_Check_QckFdbckCrssVrsn_1_vryLngSbprjctNmLngrThnEvrythngWHv", shortenedId)

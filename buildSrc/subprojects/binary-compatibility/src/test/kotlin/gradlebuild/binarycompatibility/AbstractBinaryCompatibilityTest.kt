@@ -104,24 +104,30 @@ abstract class AbstractBinaryCompatibilityTest {
     fun runKotlinBinaryCompatibilityCheck(v1: String, v2: String, block: CheckResult.() -> Unit = {}): CheckResult =
         runBinaryCompatibilityCheck(
             v1 = {
-                withFile("kotlin/com/example/Source.kt", """
+                withFile(
+                    "kotlin/com/example/Source.kt",
+                    """
                     package com.example
 
                     import org.gradle.api.Incubating
                     import javax.annotation.Nullable
 
                     $v1
-                """)
+                    """
+                )
             },
             v2 = {
-                withFile("kotlin/com/example/Source.kt", """
+                withFile(
+                    "kotlin/com/example/Source.kt",
+                    """
                     package com.example
 
                     import org.gradle.api.Incubating
                     import javax.annotation.Nullable
 
                     $v2
-                """)
+                    """
+                )
             },
             block = block
         )
@@ -130,24 +136,30 @@ abstract class AbstractBinaryCompatibilityTest {
     fun runJavaBinaryCompatibilityCheck(v1: String, v2: String, block: CheckResult.() -> Unit = {}): CheckResult =
         runBinaryCompatibilityCheck(
             v1 = {
-                withFile("java/com/example/Source.java", """
+                withFile(
+                    "java/com/example/Source.java",
+                    """
                     package com.example;
 
                     import org.gradle.api.Incubating;
                     import javax.annotation.Nullable;
 
                     $v1
-                """)
+                    """
+                )
             },
             v2 = {
-                withFile("java/com/example/Source.java", """
+                withFile(
+                    "java/com/example/Source.java",
+                    """
                     package com.example;
 
                     import org.gradle.api.Incubating;
                     import javax.annotation.Nullable;
 
                     $v2
-                """)
+                    """
+                )
             },
             block = block
         )
@@ -167,8 +179,9 @@ abstract class AbstractBinaryCompatibilityTest {
 
         val inputBuildDir = rootDir.withUniqueDirectory("input-build").apply {
 
-            withSettings("""include("v1", "v2", "binaryCompatibility")""")
-            withBuildScript("""
+            withSettings("""include("v1", "v2", "binary-compatibility")""")
+            withBuildScript(
+                """
                     import gradlebuild.identity.extension.ModuleIdentityExtension
 
                     plugins {
@@ -193,11 +206,13 @@ abstract class AbstractBinaryCompatibilityTest {
                     project(":v2") {
                         version = "2.0"
                     }
-                """)
+                """
+            )
             withDirectory("v1/src/main").v1()
             withDirectory("v2/src/main").v2()
-            withDirectory("binaryCompatibility").apply {
-                withBuildScript("""
+            withDirectory("binary-compatibility").apply {
+                withBuildScript(
+                    """
                     import japicmp.model.JApiChangeStatus
                     import me.champeau.gradle.japicmp.JapicmpTask
                     import gradlebuild.binarycompatibility.*
@@ -241,14 +256,15 @@ abstract class AbstractBinaryCompatibilityTest {
                             "2.0"
                         )
                     }
-                """)
+                    """
+                )
             }
         }
 
         val runner = GradleRunner.create()
             .withProjectDir(inputBuildDir)
             .withPluginClasspath()
-            .withArguments(":binaryCompatibility:checkBinaryCompatibility", "-s")
+            .withArguments(":binary-compatibility:checkBinaryCompatibility", "-s")
 
         val (buildResult, failure) = try {
             runner.build()!! to null
@@ -258,7 +274,7 @@ abstract class AbstractBinaryCompatibilityTest {
 
         println(buildResult.output)
 
-        val richReportFile = inputBuildDir.resolve("binaryCompatibility/build/japi/japi.html").apply {
+        val richReportFile = inputBuildDir.resolve("binary-compatibility/build/japi/japi.html").apply {
             assertTrue("Rich report file exists", isFile)
         }
 

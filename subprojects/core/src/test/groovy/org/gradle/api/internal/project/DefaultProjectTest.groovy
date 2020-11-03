@@ -72,6 +72,7 @@ import org.gradle.configuration.project.ProjectEvaluator
 import org.gradle.groovy.scripts.EmptyScript
 import org.gradle.groovy.scripts.ScriptSource
 import org.gradle.initialization.ClassLoaderScopeRegistryListener
+import org.gradle.internal.management.DependencyResolutionManagementInternal
 import org.gradle.initialization.ProjectAccessListener
 import org.gradle.internal.Factory
 import org.gradle.internal.instantiation.InstantiatorFactory
@@ -98,6 +99,7 @@ import spock.lang.Specification
 import java.awt.Point
 import java.lang.reflect.Type
 import java.text.FieldPosition
+import java.util.function.Consumer
 
 class DefaultProjectTest extends Specification {
 
@@ -152,6 +154,7 @@ class DefaultProjectTest extends Specification {
     ApiTextResourceAdapter.Factory textResourceAdapterFactory = Stub(ApiTextResourceAdapter.Factory)
     BuildOperationExecutor buildOperationExecutor = new TestBuildOperationExecutor()
     ListenerBuildOperationDecorator listenerBuildOperationDecorator = new TestListenerBuildOperationDecorator()
+    DependencyResolutionManagementInternal dependencyResolutionManagement = Stub(DependencyResolutionManagementInternal)
     CrossProjectConfigurator crossProjectConfigurator = new BuildOperationCrossProjectConfigurator(buildOperationExecutor)
     ClassLoaderScope baseClassLoaderScope = new RootClassLoaderScope("root", getClass().classLoader, getClass().classLoader, new DummyClassLoaderCache(), Stub(ClassLoaderScopeRegistryListener))
     ClassLoaderScope rootProjectClassLoaderScope = baseClassLoaderScope.createChild("root-project")
@@ -212,6 +215,7 @@ class DefaultProjectTest extends Specification {
         serviceRegistryMock.get(BuildOperationExecutor) >> buildOperationExecutor
         serviceRegistryMock.get((Type) ListenerBuildOperationDecorator) >> listenerBuildOperationDecorator
         serviceRegistryMock.get((Type) CrossProjectConfigurator) >> crossProjectConfigurator
+        serviceRegistryMock.get(DependencyResolutionManagementInternal) >> dependencyResolutionManagement
         serviceRegistryMock.get(DomainObjectCollectionFactory) >> TestUtil.domainObjectCollectionFactory()
         pluginManager.getPluginContainer() >> pluginContainer
 
@@ -254,8 +258,9 @@ class DefaultProjectTest extends Specification {
         def container = Stub(ProjectState)
         _ * container.identityPath >> (parent == null ? Path.ROOT : parent.identityPath.child(name))
         _ * container.projectPath >> (parent == null ? Path.ROOT : parent.projectPath.child(name))
-        _ * container.withMutableState(_) >> { Runnable runnable -> runnable.run() }
-        TestUtil.instantiatorFactory().decorateLenient().newInstance(DefaultProject, name, parent, rootDir, new File(rootDir, 'build.gradle'), script, build, container, projectServiceRegistryFactoryMock, scope, baseClassLoaderScope)
+        def project = TestUtil.instantiatorFactory().decorateLenient().newInstance(DefaultProject, name, parent, rootDir, new File(rootDir, 'build.gradle'), script, build, container, projectServiceRegistryFactoryMock, scope, baseClassLoaderScope)
+        _ * container.applyToMutableState(_) >> { Consumer action -> action.accept(project) }
+        return project
     }
 
     Type getProjectRegistryType() {

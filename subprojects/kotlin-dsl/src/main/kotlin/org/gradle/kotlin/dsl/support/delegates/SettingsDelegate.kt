@@ -21,6 +21,7 @@ import groovy.lang.Closure
 import org.gradle.StartParameter
 import org.gradle.api.Action
 import org.gradle.api.initialization.ConfigurableIncludedBuild
+import org.gradle.api.initialization.resolve.DependencyResolutionManagement
 import org.gradle.api.initialization.ProjectDescriptor
 import org.gradle.api.initialization.Settings
 import org.gradle.api.initialization.dsl.ScriptHandler
@@ -29,6 +30,7 @@ import org.gradle.api.plugins.ExtensionContainer
 import org.gradle.api.plugins.ObjectConfigurationAction
 import org.gradle.api.plugins.PluginContainer
 import org.gradle.api.plugins.PluginManager
+import org.gradle.api.provider.ProviderFactory
 import org.gradle.caching.configuration.BuildCacheConfiguration
 import org.gradle.plugin.management.PluginManagementSpec
 import org.gradle.vcs.SourceControl
@@ -127,4 +129,10 @@ abstract class SettingsDelegate : Settings {
 
     override fun getSourceControl(): SourceControl =
         delegate.sourceControl
+
+    override fun getProviders(): ProviderFactory =
+        delegate.providers
+
+    override fun dependencyResolutionManagement(dependencyResolutionConfiguration: Action<in DependencyResolutionManagement>) =
+        delegate.dependencyResolutionManagement(dependencyResolutionConfiguration)
 }

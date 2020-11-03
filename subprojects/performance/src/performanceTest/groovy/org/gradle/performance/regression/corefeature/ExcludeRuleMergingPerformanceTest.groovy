@@ -16,26 +16,30 @@
 
 package org.gradle.performance.regression.corefeature
 
-import org.gradle.performance.AbstractCrossVersionGradleProfilerPerformanceTest
+import org.gradle.performance.AbstractCrossVersionPerformanceTest
 import org.gradle.performance.WithExternalRepository
+import org.gradle.performance.annotations.RunFor
+import org.gradle.performance.annotations.Scenario
 
-class ExcludeRuleMergingPerformanceTest extends AbstractCrossVersionGradleProfilerPerformanceTest implements WithExternalRepository {
+import static org.gradle.performance.annotations.ScenarioType.TEST
+import static org.gradle.performance.results.OperatingSystem.LINUX
 
-    private final static TEST_PROJECT_NAME = 'excludeRuleMergingBuild'
+@RunFor(
+    @Scenario(type = TEST, operatingSystems = [LINUX], testProjects = ["excludeRuleMergingBuild"])
+)
+class ExcludeRuleMergingPerformanceTest extends AbstractCrossVersionPerformanceTest implements WithExternalRepository {
 
     def setup() {
         runner.minimumBaseVersion = '4.9'
-        runner.targetVersions = ["6.7-20200723220251+0000"]
+        runner.targetVersions = ["6.8-20201028230040+0000"]
     }
 
     def "merge exclude rules"() {
-        runner.testProject = TEST_PROJECT_NAME
         startServer()
 
         given:
         runner.tasksToRun = ['resolveDependencies']
-        runner.gradleOpts = ["-Xms512m", "-Xmx512m"]
-        runner.args = ['-PuseHttp', "-PhttpPort=${serverPort}"]
+        runner.args = ['-PuseHttp', "-PhttpPort=${serverPort}", "-Dorg.gradle.parallel=false"]
 
         when:
         def result = runner.run()
@@ -48,12 +52,10 @@ class ExcludeRuleMergingPerformanceTest extends AbstractCrossVersionGradleProfil
     }
 
     def "merge exclude rules (parallel)"() {
-        runner.testProject = TEST_PROJECT_NAME
         startServer()
 
         given:
         runner.tasksToRun = ['resolveDependencies']
-        runner.gradleOpts = ["-Xms800m", "-Xmx800m"]
         runner.args = ['-PuseHttp', "-PhttpPort=${serverPort}", "--parallel"]
         when:
         def result = runner.run()

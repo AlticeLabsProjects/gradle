@@ -22,6 +22,7 @@ import com.nhaarman.mockito_kotlin.eq
 import com.nhaarman.mockito_kotlin.inOrder
 import com.nhaarman.mockito_kotlin.mock
 import com.nhaarman.mockito_kotlin.same
+import kotlinx.metadata.jvm.KmModuleVisitor
 
 import org.gradle.api.Action
 import org.gradle.api.NamedDomainObjectContainer
@@ -257,7 +258,7 @@ class ProjectAccessorsClassPathTest : AbstractDslTest() {
         require(
             compileToDirectory(
                 binDir,
-                "accessors",
+                "bin",
                 kotlinFilesIn(srcDir),
                 loggerFor<ProjectAccessorsClassPathTest>(),
                 classPath.asFiles
@@ -385,6 +386,13 @@ class ProjectAccessorsClassPathTest : AbstractDslTest() {
                         }
                     }
                 }
+
+                fun Project.canUseContainerElementAccessors() {
+                    sourceSets {
+                        main {
+                        }
+                    }
+                }
             """
         )
 
@@ -487,6 +495,8 @@ class ProjectAccessorsClassPathTest : AbstractDslTest() {
 
         buildAccessorsFor(schema, classPath, srcDir, binDir)
 
+        dumpKotlinMetadataOf(binDir)
+
         eval(
             script = script,
             target = target,
@@ -500,6 +510,23 @@ class ProjectAccessorsClassPathTest : AbstractDslTest() {
     fun buildAccessorsFor(schema: TypedProjectSchema, classPath: ClassPath, srcDir: File, binDir: File) {
         withSynchronousIO {
             buildAccessorsFor(schema, classPath, srcDir, binDir)
+        }
+    }
+
+    private
+    fun dumpKotlinMetadataOf(moduleDir: File) {
+        withClassLoaderFor(DefaultClassPath.of(moduleDir)) {
+            visitMetadataOfModule(
+                moduleDir, moduleDir.name,
+                object : KmModuleVisitor() {
+                    override fun visitPackageParts(fqName: String, fileFacades: List<String>, multiFileClassParts: Map<String, String>) {
+                        fileFacades.forEach {
+                            val fileFacadeClassName = it.replace('/', '.')
+                            dumpFileFacadeHeaderOf(loadClass(fileFacadeClassName))
+                        }
+                    }
+                }
+            )
         }
     }
 }

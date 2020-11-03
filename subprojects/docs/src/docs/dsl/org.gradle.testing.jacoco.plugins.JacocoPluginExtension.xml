@@ -26,10 +26,10 @@
             </thead>
             <tr>
                 <td>toolVersion</td>
-                <td><literal>0.8.5</literal></td>
+                <td><literal>0.8.6</literal></td>
             </tr>
             <tr>
-                <td>reportsDir</td>
+                <td>reportsDirectory</td>
                 <td><literal><replaceable>${project.reporting.baseDir}</replaceable>/jacoco</literal></td>
             </tr>
         </table>

@@ -26,6 +26,8 @@ import org.gradle.performance.results.CrossVersionPerformanceResults
 import org.gradle.performance.results.CrossVersionPerformanceTestHistory
 import org.gradle.performance.results.GradleVsMavenBuildPerformanceResults
 import org.gradle.performance.results.MeasuredOperationList
+import org.gradle.performance.results.PerformanceExperiment
+import org.gradle.performance.results.PerformanceScenario
 import org.gradle.performance.results.PerformanceTestHistory
 import spock.lang.Specification
 
@@ -34,6 +36,7 @@ abstract class ResultSpecification extends Specification {
 
     CrossVersionPerformanceResults crossVersionResults(Map<String, ?> options = [:]) {
         def results = new CrossVersionPerformanceResults()
+        results.testClass = "org.gradle.performance.MyPerformanceTest"
         results.testId = "test-id"
         results.previousTestIds = []
         results.testProject = "test-project"
@@ -56,8 +59,10 @@ abstract class ResultSpecification extends Specification {
 
     CrossBuildPerformanceResults crossBuildResults(Map<String, ?> options = [:]) {
         def results = new CrossBuildPerformanceResults(
+                testClass: "org.gradle.performance.MyCrossBuildPerformanceTest",
                 testId: "test-id",
                 testGroup: "test-group",
+                testProject: "test-project",
                 jvm: "java 7",
                 versionUnderTest: "Gradle 1.0",
                 operatingSystem: "windows",
@@ -73,7 +78,9 @@ abstract class ResultSpecification extends Specification {
 
     GradleVsMavenBuildPerformanceResults gradleVsMavenBuildResults(Map<String, ?> options = [:]) {
         def results = new GradleVsMavenBuildPerformanceResults(
+                testClass: "org.gradle.performance.MyGradleVsMavenPerformanceTest",
                 testId: "test-id",
+                testProject: 'test-project',
                 testGroup: "test-group",
                 jvm: "java 7",
                 versionUnderTest: "Gradle 1.0",
@@ -107,7 +114,7 @@ abstract class ResultSpecification extends Specification {
         result2.version('5.0-mockbaseline-2').results.addAll(measuredOperations([2, 2]))
         result2.version('master').results.addAll(measuredOperations([1, 1]))
 
-        return new CrossVersionPerformanceTestHistory('mockCrossVersion',
+        return new CrossVersionPerformanceTestHistory(new PerformanceExperiment('test-project', new PerformanceScenario('org.gradle.performance.MyPerformanceTest', 'mockScenario')),
             ['5.0-mockbaseline-1', '5.0-mockbaseline-2'],
             ['master'],
             [result2, result1]
@@ -123,7 +130,7 @@ abstract class ResultSpecification extends Specification {
         CrossBuildPerformanceResults result2  = crossBuildResults(startTime: 200)
         result1.buildResult(info2).addAll(measuredOperations([2]))
 
-        return new CrossBuildPerformanceTestHistory('mockCrossBuild', [info1, info2], [result2, result1])
+        return new CrossBuildPerformanceTestHistory(new PerformanceExperiment("test-project", new PerformanceScenario("org.gradle.performance.MyCrossBuildPerformanceTest", "my scenario name")), [info1, info2], [result2, result1])
     }
 
     List<MeasuredOperation> measuredOperations(List<Integer> values) {

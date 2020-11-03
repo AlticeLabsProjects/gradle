@@ -72,7 +72,6 @@ import org.gradle.configuration.project.DefaultProjectConfigurationActionContain
 import org.gradle.configuration.project.ProjectConfigurationActionContainer;
 import org.gradle.initialization.ProjectAccessListener;
 import org.gradle.internal.Factory;
-import org.gradle.internal.build.BuildStateRegistry;
 import org.gradle.internal.file.PathToFileResolver;
 import org.gradle.internal.instantiation.InstantiatorFactory;
 import org.gradle.internal.jvm.JavaModuleDetector;
@@ -96,7 +95,6 @@ import org.gradle.normalization.internal.DefaultRuntimeClasspathNormalization;
 import org.gradle.normalization.internal.InputNormalizationHandlerInternal;
 import org.gradle.normalization.internal.RuntimeClasspathNormalizationInternal;
 import org.gradle.process.internal.ExecFactory;
-import org.gradle.tooling.provider.model.ToolingModelBuilderRegistry;
 import org.gradle.tooling.provider.model.internal.DefaultToolingModelBuilderRegistry;
 import org.gradle.util.Path;
 
@@ -172,7 +170,7 @@ public class ProjectScopeServices extends DefaultServiceRegistry {
         return new DefaultAntBuilderFactory(project, new DefaultAntLoggingAdapterFactory());
     }
 
-    protected ToolingModelBuilderRegistry decorateToolingModelRegistry(ToolingModelBuilderRegistry buildScopedToolingModelBuilders, BuildOperationExecutor buildOperationExecutor, ProjectStateRegistry projectStateRegistry) {
+    protected DefaultToolingModelBuilderRegistry decorateToolingModelRegistry(DefaultToolingModelBuilderRegistry buildScopedToolingModelBuilders, BuildOperationExecutor buildOperationExecutor, ProjectStateRegistry projectStateRegistry) {
         return new DefaultToolingModelBuilderRegistry(buildOperationExecutor, projectStateRegistry, buildScopedToolingModelBuilders);
     }
 
@@ -195,7 +193,6 @@ public class ProjectScopeServices extends DefaultServiceRegistry {
 
     protected TaskContainerInternal createTaskContainerInternal(TaskStatistics taskStatistics, BuildOperationExecutor buildOperationExecutor, CrossProjectConfigurator crossProjectConfigurator, CollectionCallbackActionDecorator decorator) {
         return new DefaultTaskContainerFactory(
-            get(ModelRegistry.class),
             get(Instantiator.class),
             get(ITaskFactory.class),
             project,
@@ -212,14 +209,12 @@ public class ProjectScopeServices extends DefaultServiceRegistry {
         return instantiator.newInstance(DefaultSoftwareComponentContainer.class, instantiator, decorator);
     }
 
-    protected ProjectFinder createProjectFinder(final BuildStateRegistry buildStateRegistry) {
-        return new DefaultProjectFinder(buildStateRegistry, () -> project);
+    protected ProjectFinder createProjectFinder() {
+        return new DefaultProjectFinder(() -> project);
     }
 
     protected ModelRegistry createModelRegistry(ModelRuleExtractor ruleExtractor) {
-        return new DefaultModelRegistry(ruleExtractor, project.getPath(), run -> {
-            project.getMutationState().withMutableState(run);
-        });
+        return new DefaultModelRegistry(ruleExtractor, project.getPath(), run -> project.getMutationState().applyToMutableState(p -> run.run()));
     }
 
     protected ScriptHandlerInternal createScriptHandler(DependencyManagementServices dependencyManagementServices, FileResolver fileResolver, FileCollectionFactory fileCollectionFactory, DependencyMetaDataProvider dependencyMetaDataProvider, ScriptClassPathResolver scriptClassPathResolver, NamedObjectInstantiator instantiator) {
@@ -266,7 +261,7 @@ public class ProjectScopeServices extends DefaultServiceRegistry {
         }
 
         @Override
-        public ModelContainer getModel() {
+        public ModelContainer<?> getModel() {
             return delegate.getModel();
         }
 

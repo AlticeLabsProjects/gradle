@@ -19,6 +19,7 @@ package org.gradle.testfixtures.internal;
 import org.gradle.StartParameter;
 import org.gradle.api.Project;
 import org.gradle.api.Transformer;
+import org.gradle.api.artifacts.ModuleVersionIdentifier;
 import org.gradle.api.artifacts.component.BuildIdentifier;
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier;
 import org.gradle.api.internal.BuildType;
@@ -43,11 +44,14 @@ import org.gradle.initialization.NestedBuildFactory;
 import org.gradle.initialization.NoOpBuildEventConsumer;
 import org.gradle.initialization.ProjectDescriptorRegistry;
 import org.gradle.internal.FileUtils;
+import org.gradle.internal.Pair;
 import org.gradle.internal.build.AbstractBuildState;
 import org.gradle.internal.build.BuildState;
 import org.gradle.internal.build.BuildStateRegistry;
 import org.gradle.internal.build.RootBuildState;
+import org.gradle.internal.buildtree.BuildTreeState;
 import org.gradle.internal.classpath.ClassPath;
+import org.gradle.internal.concurrent.Stoppable;
 import org.gradle.internal.instantiation.InstantiatorFactory;
 import org.gradle.internal.invocation.BuildController;
 import org.gradle.internal.logging.services.LoggingServiceRegistry;
@@ -56,18 +60,22 @@ import org.gradle.internal.resources.DefaultResourceLockCoordinationService;
 import org.gradle.internal.resources.ResourceLockCoordinationService;
 import org.gradle.internal.service.ServiceRegistry;
 import org.gradle.internal.service.ServiceRegistryBuilder;
-import org.gradle.internal.service.scopes.BuildSessionScopeServices;
-import org.gradle.internal.service.scopes.BuildTreeScopeServices;
-import org.gradle.internal.service.scopes.CrossBuildSessionScopeServices;
 import org.gradle.internal.service.scopes.GradleUserHomeScopeServiceRegistry;
 import org.gradle.internal.service.scopes.ServiceRegistryFactory;
+import org.gradle.internal.session.BuildSessionState;
+import org.gradle.internal.session.CrossBuildSessionState;
 import org.gradle.internal.time.Time;
+import org.gradle.internal.work.DefaultWorkerLeaseService;
+import org.gradle.internal.work.WorkerLeaseRegistry;
 import org.gradle.internal.work.WorkerLeaseService;
 import org.gradle.invocation.DefaultGradle;
 import org.gradle.util.Path;
 
 import java.io.File;
 import java.util.Collections;
+import java.util.Set;
+
+import static org.gradle.internal.concurrent.CompositeStoppable.stoppable;
 
 public class ProjectBuilderImpl {
     private static ServiceRegistry globalServices;
@@ -103,11 +111,11 @@ public class ProjectBuilderImpl {
         NativeServices.initialize(userHomeDir);
 
         BuildRequestMetaData buildRequestMetaData = new DefaultBuildRequestMetaData(Time.currentTimeMillis());
-        CrossBuildSessionScopeServices crossBuildSessionScopeServices = new CrossBuildSessionScopeServices(getGlobalServices(), startParameter);
-        ServiceRegistry userHomeServices = getUserHomeServices(userHomeDir);
-        BuildSessionScopeServices buildSessionScopeServices = new BuildSessionScopeServices(userHomeServices, crossBuildSessionScopeServices, startParameter, buildRequestMetaData, ClassPath.EMPTY, new DefaultBuildCancellationToken(), buildRequestMetaData.getClient(), new NoOpBuildEventConsumer());
-        BuildTreeScopeServices buildTreeScopeServices = new BuildTreeScopeServices(buildSessionScopeServices, BuildType.TASKS);
-        TestBuildScopeServices buildServices = new TestBuildScopeServices(buildTreeScopeServices, homeDir);
+        CrossBuildSessionState crossBuildSessionState = new CrossBuildSessionState(getGlobalServices(), startParameter);
+        GradleUserHomeScopeServiceRegistry userHomeServices = getUserHomeServices();
+        BuildSessionState buildSessionState = new BuildSessionState(userHomeServices, crossBuildSessionState, startParameter, buildRequestMetaData, ClassPath.EMPTY, new DefaultBuildCancellationToken(), buildRequestMetaData.getClient(), new NoOpBuildEventConsumer());
+        BuildTreeState buildTreeState = new BuildTreeState(buildSessionState.getServices(), BuildType.TASKS);
+        TestBuildScopeServices buildServices = new TestBuildScopeServices(buildTreeState.getServices(), homeDir);
         TestRootBuild build = new TestRootBuild(projectDir);
         buildServices.add(BuildState.class, build);
 
@@ -132,15 +140,31 @@ public class ProjectBuilderImpl {
         // Take a root worker lease and lock the project, these won't ever be released as ProjectBuilder has no lifecycle
         ResourceLockCoordinationService coordinationService = buildServices.get(ResourceLockCoordinationService.class);
         WorkerLeaseService workerLeaseService = buildServices.get(WorkerLeaseService.class);
-        coordinationService.withStateLock(DefaultResourceLockCoordinationService.lock(workerLeaseService.getWorkerLease(), project.getMutationState().getAccessLock()));
+        WorkerLeaseRegistry.WorkerLease workerLease = workerLeaseService.getWorkerLease();
+        coordinationService.withStateLock(DefaultResourceLockCoordinationService.lock(workerLease, project.getMutationState().getAccessLock()));
 
+        project.getExtensions().getExtraProperties().set(
+            "ProjectBuilder.stoppable",
+            stoppable(
+                (Stoppable) workerLeaseService::releaseCurrentProjectLocks,
+                (Stoppable) ((DefaultWorkerLeaseService) workerLeaseService)::releaseCurrentResourceLocks,
+                buildServices,
+                buildTreeState,
+                buildSessionState,
+                crossBuildSessionState
+            )
+        );
         return project;
     }
 
-    private ServiceRegistry getUserHomeServices(File userHomeDir) {
+    public static void stop(Project rootProject) {
+        ((Stoppable) rootProject.getExtensions().getExtraProperties().get("ProjectBuilder.stoppable"))
+            .stop();
+    }
+
+    private GradleUserHomeScopeServiceRegistry getUserHomeServices() {
         ServiceRegistry globalServices = getGlobalServices();
-        GradleUserHomeScopeServiceRegistry userHomeScopeServiceRegistry = globalServices.get(GradleUserHomeScopeServiceRegistry.class);
-        return userHomeScopeServiceRegistry.getServicesFor(userHomeDir);
+        return globalServices.get(GradleUserHomeScopeServiceRegistry.class);
     }
 
     public synchronized static ServiceRegistry getGlobalServices() {
@@ -239,6 +263,21 @@ public class ProjectBuilderImpl {
         @Override
         public File getBuildRootDir() {
             return rootProjectDir;
+        }
+
+        @Override
+        public Set<Pair<ModuleVersionIdentifier, ProjectComponentIdentifier>> getAvailableModules() {
+            return Collections.emptySet();
+        }
+
+        @Override
+        public GradleInternal getBuild() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public ProjectComponentIdentifier idToReferenceProjectFromAnotherBuild(ProjectComponentIdentifier identifier) {
+            throw new UnsupportedOperationException();
         }
     }
 }

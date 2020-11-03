@@ -32,25 +32,26 @@ import org.gradle.initialization.BuildCancellationToken;
 import org.gradle.internal.concurrent.ExecutorFactory;
 import org.gradle.internal.enterprise.core.GradleEnterprisePluginManager;
 import org.gradle.internal.event.ListenerManager;
-import org.gradle.internal.execution.CachingResult;
-import org.gradle.internal.execution.ExecutionRequestContext;
+import org.gradle.internal.execution.ExecutionEngine;
 import org.gradle.internal.execution.OutputChangeListener;
-import org.gradle.internal.execution.WorkExecutor;
+import org.gradle.internal.execution.OutputSnapshotter;
 import org.gradle.internal.execution.history.ExecutionHistoryCacheAccess;
 import org.gradle.internal.execution.history.ExecutionHistoryStore;
 import org.gradle.internal.execution.history.OutputFilesRepository;
 import org.gradle.internal.execution.history.changes.ExecutionStateChangeDetector;
 import org.gradle.internal.execution.history.impl.DefaultExecutionHistoryStore;
 import org.gradle.internal.execution.history.impl.DefaultOutputFilesRepository;
-import org.gradle.internal.execution.impl.DefaultWorkExecutor;
+import org.gradle.internal.execution.impl.DefaultExecutionEngine;
+import org.gradle.internal.execution.steps.AssignWorkspaceStep;
 import org.gradle.internal.execution.steps.BroadcastChangingOutputsStep;
-import org.gradle.internal.execution.steps.CacheStep;
+import org.gradle.internal.execution.steps.BuildCacheStep;
 import org.gradle.internal.execution.steps.CancelExecutionStep;
 import org.gradle.internal.execution.steps.CaptureStateBeforeExecutionStep;
-import org.gradle.internal.execution.steps.CatchExceptionStep;
-import org.gradle.internal.execution.steps.CleanupOutputsStep;
+import org.gradle.internal.execution.steps.RemovePreviousOutputsStep;
 import org.gradle.internal.execution.steps.CreateOutputsStep;
 import org.gradle.internal.execution.steps.ExecuteStep;
+import org.gradle.internal.execution.steps.IdentifyStep;
+import org.gradle.internal.execution.steps.IdentityCacheStep;
 import org.gradle.internal.execution.steps.LoadExecutionStateStep;
 import org.gradle.internal.execution.steps.RecordOutputsStep;
 import org.gradle.internal.execution.steps.ResolveCachingStateStep;
@@ -81,12 +82,20 @@ import java.util.Collections;
 import static org.gradle.cache.internal.filelock.LockOptionsBuilder.mode;
 
 public class ExecutionGradleServices {
-    ExecutionHistoryCacheAccess createCacheAccess(Gradle gradle, CacheRepository cacheRepository, InMemoryCacheDecoratorFactory inMemoryCacheDecoratorFactory) {
-        return new DefaultExecutionHistoryCacheAccess(gradle, cacheRepository, inMemoryCacheDecoratorFactory);
+    ExecutionHistoryCacheAccess createCacheAccess(Gradle gradle, CacheRepository cacheRepository) {
+        return new DefaultExecutionHistoryCacheAccess(gradle, cacheRepository);
     }
 
-    ExecutionHistoryStore createExecutionHistoryStore(ExecutionHistoryCacheAccess executionHistoryCacheAccess, StringInterner stringInterner) {
-        return new DefaultExecutionHistoryStore(executionHistoryCacheAccess, stringInterner);
+    ExecutionHistoryStore createExecutionHistoryStore(
+        ExecutionHistoryCacheAccess executionHistoryCacheAccess,
+        InMemoryCacheDecoratorFactory inMemoryCacheDecoratorFactory,
+        StringInterner stringInterner
+    ) {
+        return new DefaultExecutionHistoryStore(
+            executionHistoryCacheAccess,
+            inMemoryCacheDecoratorFactory,
+            stringInterner
+        );
     }
 
     OutputFilesRepository createOutputFilesRepository(CacheRepository cacheRepository, Gradle gradle, InMemoryCacheDecoratorFactory inMemoryCacheDecoratorFactory) {
@@ -124,7 +133,7 @@ public class ExecutionGradleServices {
         return listenerManager.getBroadcaster(OutputChangeListener.class);
     }
 
-    public WorkExecutor<ExecutionRequestContext, CachingResult> createWorkExecutor(
+    public ExecutionEngine createExecutionEngine(
         BuildCacheCommandFactory buildCacheCommandFactory,
         BuildCacheController buildCacheController,
         BuildCancellationToken cancellationToken,
@@ -136,35 +145,38 @@ public class ExecutionGradleServices {
         ExecutionStateChangeDetector changeDetector,
         OutputChangeListener outputChangeListener,
         OutputFilesRepository outputFilesRepository,
+        OutputSnapshotter outputSnapshotter,
         OverlappingOutputDetector overlappingOutputDetector,
         TimeoutHandler timeoutHandler,
         ValidateStep.ValidationWarningReporter validationWarningReporter,
         ValueSnapshotter valueSnapshotter
     ) {
         // @formatter:off
-        return new DefaultWorkExecutor<>(
+        return new DefaultExecutionEngine(
+            new IdentifyStep<>(valueSnapshotter,
+            new IdentityCacheStep<>(
+            new AssignWorkspaceStep<>(
             new LoadExecutionStateStep<>(
             new MarkSnapshottingInputsStartedStep<>(
             new SkipEmptyWorkStep<>(
             new ValidateStep<>(validationWarningReporter,
-            new CaptureStateBeforeExecutionStep(buildOperationExecutor, classLoaderHierarchyHasher, valueSnapshotter, overlappingOutputDetector,
+            new CaptureStateBeforeExecutionStep(buildOperationExecutor, classLoaderHierarchyHasher, outputSnapshotter, overlappingOutputDetector, valueSnapshotter,
             new ResolveCachingStateStep(buildCacheController, gradleEnterprisePluginManager.isPresent(),
             new MarkSnapshottingInputsFinishedStep<>(
             new ResolveChangesStep<>(changeDetector,
             new SkipUpToDateStep<>(
             new RecordOutputsStep<>(outputFilesRepository,
             new StoreExecutionStateStep<>(
-            new CacheStep(buildCacheController, buildCacheCommandFactory, deleter, outputChangeListener,
+            new BuildCacheStep(buildCacheController, buildCacheCommandFactory, deleter, outputChangeListener,
             new BroadcastChangingOutputsStep<>(outputChangeListener,
-            new SnapshotOutputsStep<>(buildOperationExecutor, buildInvocationScopeId.getId(),
+            new SnapshotOutputsStep<>(buildOperationExecutor, buildInvocationScopeId.getId(), outputSnapshotter,
             new CreateOutputsStep<>(
-            new CatchExceptionStep<>(
             new TimeoutStep<>(timeoutHandler,
             new CancelExecutionStep<>(cancellationToken,
             new ResolveInputChangesStep<>(
-            new CleanupOutputsStep<>(deleter, outputChangeListener,
-            new ExecuteStep<>(
-        ))))))))))))))))))))));
+            new RemovePreviousOutputsStep<>(deleter, outputChangeListener,
+            new ExecuteStep<>(buildOperationExecutor
+        ))))))))))))))))))))))));
         // @formatter:on
     }
 

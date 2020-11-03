@@ -16,39 +16,32 @@
 
 package org.gradle.performance.regression.nativeplatform
 
-import org.gradle.initialization.ParallelismBuildOptions
-import org.gradle.performance.AbstractCrossVersionGradleProfilerPerformanceTest
-import org.gradle.performance.categories.SlowPerformanceRegressionTest
-import org.junit.experimental.categories.Category
-import spock.lang.Unroll
+import org.gradle.performance.AbstractCrossVersionPerformanceTest
+import org.gradle.performance.annotations.RunFor
+import org.gradle.performance.annotations.Scenario
 
-@Category(SlowPerformanceRegressionTest)
-class SwiftCleanBuildPerformanceTest extends AbstractCrossVersionGradleProfilerPerformanceTest {
+import static org.gradle.performance.annotations.ScenarioType.SLOW
+import static org.gradle.performance.results.OperatingSystem.LINUX
+
+@RunFor(
+    @Scenario(type = SLOW, operatingSystems = [LINUX], testProjects = ['mediumSwiftMulti', 'bigSwiftApp'])
+)
+class SwiftCleanBuildPerformanceTest extends AbstractCrossVersionPerformanceTest {
 
     def setup() {
         runner.minimumBaseVersion = '4.6'
-        runner.targetVersions = ["6.7-20200723220251+0000"]
-        runner.args += ["--parallel", "--${ParallelismBuildOptions.MaxWorkersOption.LONG_OPTION}=6"]
+        runner.targetVersions = ["6.8-20201028230040+0000"]
     }
 
-    @Unroll
-    def "clean assemble on #testProject"() {
+    def "clean assemble (swift)"() {
         given:
-        runner.testProject = testProject
         runner.tasksToRun = ["assemble"]
         runner.cleanTasks = ["clean"]
-        runner.gradleOpts = ["-Xms$maxMemory", "-Xmx$maxMemory"]
 
         when:
         def result = runner.run()
 
         then:
         result.assertCurrentVersionHasNotRegressed()
-
-        where:
-        testProject        | maxMemory
-        'mediumSwiftMulti' | '1G'
-        'bigSwiftApp'      | '1G'
     }
-
 }

@@ -16,7 +16,7 @@
 
 package org.gradle.kotlin.dsl.integration
 
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.kotlin.dsl.fixtures.AbstractKotlinIntegrationTest
 import org.gradle.kotlin.dsl.fixtures.normalisedPath
 
@@ -29,13 +29,14 @@ class TestKitIntegrationTest : AbstractKotlinIntegrationTest() {
 
     @Test
     @LeaksFileHandles("Kotlin Compiler Daemon working directory")
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     fun `withPluginClasspath works`() {
         assumeNonEmbeddedGradleExecuter()
 
         withDefaultSettings()
 
-        withBuildScript("""
+        withBuildScript(
+            """
 
             plugins {
                 `java-gradle-plugin`
@@ -59,9 +60,12 @@ class TestKitIntegrationTest : AbstractKotlinIntegrationTest() {
 
             $repositoriesBlock
 
-        """)
+            """
+        )
 
-        withFile("src/main/kotlin/plugin/TestPlugin.kt", """
+        withFile(
+            "src/main/kotlin/plugin/TestPlugin.kt",
+            """
 
             package plugin
 
@@ -77,9 +81,12 @@ class TestKitIntegrationTest : AbstractKotlinIntegrationTest() {
             open class TestExtension {
                 fun ack() = println("Ack!")
             }
-        """)
+            """
+        )
 
-        withFile("src/test/kotlin/plugin/TestPluginTest.kt", """
+        withFile(
+            "src/test/kotlin/plugin/TestPluginTest.kt",
+            """
 
             package plugin
 
@@ -127,9 +134,11 @@ class TestKitIntegrationTest : AbstractKotlinIntegrationTest() {
 
                 @Rule @JvmField val temporaryFolder = TemporaryFolder()
             }
-        """)
+            """
+        )
 
         println(
-            build("test").output)
+            build("test").output
+        )
     }
 }

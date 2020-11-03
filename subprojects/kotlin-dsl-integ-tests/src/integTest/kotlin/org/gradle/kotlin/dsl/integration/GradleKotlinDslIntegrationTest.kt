@@ -19,7 +19,7 @@ package org.gradle.kotlin.dsl.integration
 import okhttp3.HttpUrl
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.integtests.fixtures.RepoScriptBlockUtil.jcenterRepository
 import org.gradle.kotlin.dsl.embeddedKotlinVersion
 import org.gradle.kotlin.dsl.fixtures.DeepThought
@@ -56,7 +56,8 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
 
         withClassJar("fixture.jar", DeepThought::class.java)
 
-        withBuildScript("""
+        withBuildScript(
+            """
             buildscript {
                 dependencies { classpath(files("fixture.jar")) }
             }
@@ -68,10 +69,12 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
                     println("*" + answer + "*")
                 }
             }
-        """.let(buildscriptTransformation))
+            """.let(buildscriptTransformation)
+        )
 
         assert(
-            build("compute").output.contains("*42*"))
+            build("compute").output.contains("*42*")
+        )
     }
 
     @Test
@@ -79,7 +82,9 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
 
         withClassJar("fixture.jar", DeepThought::class.java)
 
-        withFile("other.gradle.kts", """
+        withFile(
+            "other.gradle.kts",
+            """
             buildscript {
                 dependencies { classpath(files("fixture.jar")) }
             }
@@ -91,27 +96,35 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
                     println("*" + answer + "*")
                 }
             }
-        """)
+            """
+        )
 
-        withBuildScript("""
+        withBuildScript(
+            """
             apply(from = "other.gradle.kts")
-        """)
+            """
+        )
 
         assert(
-            build("compute").output.contains("*42*"))
+            build("compute").output.contains("*42*")
+        )
     }
 
     @Test
     fun `given a buildSrc dir, it will be added to the compilation classpath`() {
 
-        withFile("buildSrc/src/main/groovy/build/DeepThought.groovy", """
+        withFile(
+            "buildSrc/src/main/groovy/build/DeepThought.groovy",
+            """
             package build
             class DeepThought {
                 def compute() { 42 }
             }
-        """)
+            """
+        )
 
-        withBuildScript("""
+        withBuildScript(
+            """
             task("compute") {
                 doLast {
                     val computer = build.DeepThought()
@@ -119,27 +132,34 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
                     println("*" + answer + "*")
                 }
             }
-        """)
+            """
+        )
 
         assert(
-            build("compute").output.contains("*42*"))
+            build("compute").output.contains("*42*")
+        )
     }
 
     @Test
-    @ToBeFixedForInstantExecution(because = "Kotlin Gradle Plugin")
+    @ToBeFixedForConfigurationCache(because = "Kotlin Gradle Plugin")
     fun `given a Kotlin project in buildSrc, it will be added to the compilation classpath`() {
 
         withKotlinBuildSrc()
 
-        withFile("buildSrc/src/main/kotlin/build/DeepThought.kt", """
+        withFile(
+            "buildSrc/src/main/kotlin/build/DeepThought.kt",
+            """
             package build
 
             class DeepThought() {
                 fun compute(handler: (Int) -> Unit) { handler(42) }
             }
-        """)
+            """
+        )
 
-        withFile("buildSrc/src/main/kotlin/build/DeepThoughtPlugin.kt", """
+        withFile(
+            "buildSrc/src/main/kotlin/build/DeepThoughtPlugin.kt",
+            """
             package build
 
             import org.gradle.api.*
@@ -158,9 +178,11 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
                     }
                 }
             }
-        """)
+            """
+        )
 
-        withBuildScript("""
+        withBuildScript(
+            """
             buildscript {
                 // buildSrc types are available within buildscript
                 // and must always be fully qualified
@@ -169,7 +191,8 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
                 }
             }
             apply<build.DeepThoughtPlugin>()
-        """)
+            """
+        )
 
         val output = build("compute").output
         assert(output.contains("buildscript: 42"))
@@ -177,8 +200,9 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
     }
 
     @Test
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     fun `can compile against a different (but compatible) version of the Kotlin compiler`() {
+
         assumeNonEmbeddedGradleExecuter() // Class path isolation, tested here, is not correct in embedded mode
 
         val differentKotlinVersion = "1.3.30"
@@ -186,7 +210,8 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
 
         assertNotEquals(embeddedKotlinVersion, differentKotlinVersion)
 
-        withBuildScript("""
+        withBuildScript(
+            """
             import org.jetbrains.kotlin.config.KotlinCompilerVersion
             import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
@@ -212,18 +237,21 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
                     println(KotlinCompilerVersion.VERSION + compileOptions)
                 }
             }
-        """)
+            """
+        )
 
         assertThat(
             build("print-kotlin-version").output,
-            containsString("$expectedKotlinCompilerVersionString[compileKotlin=true, compileTestKotlin=true]"))
+            containsString("$expectedKotlinCompilerVersionString[compileKotlin=true, compileTestKotlin=true]")
+        )
     }
 
     @Test
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     fun `can apply base plugin via plugins block`() {
 
-        withBuildScript("""
+        withBuildScript(
+            """
             plugins {
                 id("base")
             }
@@ -233,67 +261,81 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
                     println(plugins.map { "*" + it::class.simpleName + "*" })
                 }
             }
-        """)
+            """
+        )
 
         assertThat(
             build("plugins").output,
-            containsString("*BasePlugin*"))
+            containsString("*BasePlugin*")
+        )
     }
 
     @Test
-    @ToBeFixedForInstantExecution(because = ":buildEnvironment")
+    @ToBeFixedForConfigurationCache(because = ":buildEnvironment")
     fun `can use Closure only APIs`() {
 
-        withBuildScript("""
+        withBuildScript(
+            """
             gradle.buildFinished(closureOf<org.gradle.BuildResult> {
                 println("*" + action + "*") // <- BuildResult.getAction()
             })
-        """)
+            """
+        )
 
         assert(
-            build("build").output.contains("*Build*"))
+            build("build").output.contains("*Build*")
+        )
     }
 
     @Test
     fun `given an exception thrown during buildscript block execution, its stack trace should contain correct file and line info`() {
 
-        withBuildScript(""" // line 1
+        withBuildScript(
+            """ // line 1
             // line 2
             // line 3
             buildscript { // line 4
                 throw IllegalStateException() // line 5
             }
-        """)
+            """
+        )
 
         assertThat(
             buildFailureOutput(),
-            containsString("build.gradle.kts:5"))
+            containsString("build.gradle.kts:5")
+        )
     }
 
     @Test
     fun `given a script with more than one buildscript block, it throws exception with offending block line number`() {
 
-        withBuildScript(""" // line 1
+        withBuildScript(
+            """ // line 1
             buildscript {}  // line 2
             buildscript {}  // line 3
-        """)
+            """
+        )
 
         assertThat(
             buildFailureOutput(),
-            containsString("build.gradle.kts:3:13: Unexpected `buildscript` block found. Only one `buildscript` block is allowed per script."))
+            containsString("build.gradle.kts:3:13: Unexpected `buildscript` block found. Only one `buildscript` block is allowed per script.")
+        )
     }
 
     @Test
     fun `given a script with more than one plugins block, it throws exception with offending block line number`() {
 
-        withBuildScript(""" // line 1
+        withBuildScript(
+            """ // line 1
             plugins {}      // line 2
             plugins {}      // line 3
-        """)
+            """
+        )
 
         assertThat(
             buildFailureOutput(),
-            containsString("build.gradle.kts:3:13: Unexpected `plugins` block found. Only one `plugins` block is allowed per script."))
+            containsString("build.gradle.kts:3:13: Unexpected `plugins` block found. Only one `plugins` block is allowed per script.")
+        )
     }
 
     @Test
@@ -311,15 +353,18 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
     private
     fun assertCorrectLocationIsReportedForErrorIn(block: String) {
         val buildFile =
-            withBuildScript("""
+            withBuildScript(
+                """
                 $block {
                     val module = "foo:bar:${'$'}fooBarVersion"
                 }
-            """)
+                """
+            )
 
         assertThat(
             buildFailureOutput("tasks"),
-            containsString("e: $buildFile:3:44: Unresolved reference: fooBarVersion"))
+            containsString("e: $buildFile:3:44: Unresolved reference: fooBarVersion")
+        )
     }
 
     @Test
@@ -327,15 +372,19 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
 
         withClassJar("fixture.jar", DeepThought::class.java)
 
-        withBuildScript("""
+        withBuildScript(
+            """
             buildscript {
                 dependencies { classpath(files("fixture.jar")) }
             }
-        """)
+            """
+        )
 
         withSettings("include(\"sub-project\")")
 
-        withBuildScriptIn("sub-project", """
+        withBuildScriptIn(
+            "sub-project",
+            """
             task("compute") {
                 doLast {
                     val computer = ${DeepThought::class.qualifiedName}()
@@ -343,10 +392,12 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
                     println("*" + answer + "*")
                 }
             }
-        """)
+            """
+        )
 
         assert(
-            build(":sub-project:compute").output.contains("*42*"))
+            build(":sub-project:compute").output.contains("*42*")
+        )
     }
 
     @Test
@@ -360,19 +411,26 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
     @Test
     fun `build with groovy settings and kotlin-dsl build script succeeds`() {
 
-        withFile("settings.gradle", """
+        withFile(
+            "settings.gradle",
+            """
             println 'Groovy DSL Settings'
-        """)
+            """
+        )
 
-        withBuildScript("""
+        withBuildScript(
+            """
             println("Kotlin DSL Build Script")
-        """)
+            """
+        )
 
         assertThat(
             build("help").output,
             allOf(
                 containsString("Groovy DSL Settings"),
-                containsString("Kotlin DSL Build Script")))
+                containsString("Kotlin DSL Build Script")
+            )
+        )
     }
 
     @Test
@@ -380,7 +438,8 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
 
         assumeJavaLessThan9()
 
-        withBuildScript("""
+        withBuildScript(
+            """
 
             // without kotlin-stdlib-jdk8 we get:
             // > Retrieving groups by name is not supported on this platform.
@@ -389,17 +448,20 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
             val groups = regex.matchEntire("abc")?.groups
             println("*" + groups?.get("bla")?.value + "*")
 
-        """)
+            """
+        )
 
         assertThat(
             build("help").output,
-            containsString("*abc*"))
+            containsString("*abc*")
+        )
     }
 
     @Test
     fun `settings script can use buildscript dependencies`() {
 
-        withSettings("""
+        withSettings(
+            """
             buildscript {
                 ${jcenterRepository(GradleDsl.KOTLIN)}
                 dependencies {
@@ -408,25 +470,32 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
             }
 
             println(org.apache.commons.lang3.StringUtils.reverse("Gradle"))
-        """)
+            """
+        )
 
         assertThat(
             build("help").output,
-            containsString("eldarG"))
+            containsString("eldarG")
+        )
     }
 
     @Test
     fun `script plugin can be applied to either Project or Settings`() {
 
-        withFile("common.gradle.kts", """
+        withFile(
+            "common.gradle.kts",
+            """
             fun Project.targetName() = "Project"
             fun Settings.targetName() = "Settings"
             println("Target is " + targetName())
-        """)
+            """
+        )
 
-        withSettings("""
+        withSettings(
+            """
             apply(from = "common.gradle.kts")
-        """)
+            """
+        )
 
         assertThat(
             build("help").output,
@@ -434,9 +503,11 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
         )
 
         withSettings("")
-        withBuildScript("""
+        withBuildScript(
+            """
             apply(from = "common.gradle.kts")
-        """)
+            """
+        )
 
         assertThat(
             build("help").output,
@@ -472,24 +543,29 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
             build("help").error,
             allOf(
                 containsString("Error logging from Settings"),
-                containsString("Error logging from Project")))
+                containsString("Error logging from Project")
+            )
+        )
     }
 
     @Test
     fun `can use shorthand notation for bound callable references with inline functions in build scripts`() {
 
-        withBuildScript("""
+        withBuildScript(
+            """
             fun foo(it: Any) = true
 
             // The inline modifier is important. This does not fail when this is no inline function.
             inline fun bar(f: (Any) -> Boolean) = print("*" + f(Unit) + "*")
 
             bar(::foo)
-        """)
+            """
+        )
 
         assertThat(
             build().output,
-            containsString("*true*"))
+            containsString("*true*")
+        )
     }
 
     @Test
@@ -500,7 +576,8 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
 
         assertThat(
             buildFailureOutput().normaliseLineSeparators(),
-            containsString("""
+            containsString(
+                """
                 FAILURE: Build failed with an exception.
 
                 * Where:
@@ -513,7 +590,8 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
                           ^ Unresolved reference: foo
 
                 1 error
-            """.replaceIndent())
+                """.replaceIndent()
+            )
         )
     }
 
@@ -524,7 +602,8 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
 
         assertThat(
             buildFailureOutput().normaliseLineSeparators(),
-            containsString("""
+            containsString(
+                """
                 * What went wrong:
                 Script compilation errors:
 
@@ -536,7 +615,9 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
                               public val PluginDependenciesSpec.publishing: PluginDependencySpec defined in org.gradle.kotlin.dsl
 
                 2 errors
-            """.replaceIndent()))
+                """.replaceIndent()
+            )
+        )
     }
 
     @Test
@@ -546,7 +627,8 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
         assertThat(
             buildFailureOutput().normaliseLineSeparators(),
             allOf(
-                containsString("""
+                containsString(
+                    """
                     FAILURE: Build failed with an exception.
 
                     * Where:
@@ -555,22 +637,31 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
                     * What went wrong:
                     Script compilation errors:
 
-                """.replaceIndent()),
+                    """.replaceIndent()
+                ),
 
-                containsString("""
-                |  Line 01: println(foo)
-                |                   ^ Unresolved reference: foo
-                """.trimMargin()),
+                containsString(
+                    """
+                    |  Line 01: println(foo)
+                    |                   ^ Unresolved reference: foo
+                    """.trimMargin()
+                ),
 
-                containsString("""
-                |  Line 06: println("foo").bar.bazar
-                |                          ^ Unresolved reference: bar
-                """.trimMargin()),
+                containsString(
+                    """
+                    |  Line 06: println("foo").bar.bazar
+                    |                          ^ Unresolved reference: bar
+                    """.trimMargin()
+                ),
 
-                containsString("""
-                |  Line 10: println(cathedral)
-                |                   ^ Unresolved reference: cathedral
-                """.trimMargin())))
+                containsString(
+                    """
+                    |  Line 10: println(cathedral)
+                    |                   ^ Unresolved reference: cathedral
+                    """.trimMargin()
+                )
+            )
+        )
     }
 
     @Test
@@ -582,11 +673,14 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
 
         """
 
-        withFile("gradle/answer.gradle.kts", """
+        withFile(
+            "gradle/answer.gradle.kts",
+            """
 
             val answer by extra { "42" }
 
-        """)
+            """
+        )
 
         MockWebServer().use { server ->
 
@@ -595,11 +689,13 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
 
             val remoteScriptUrl = server.safeUrl("/remote.gradle.kts")
 
-            withBuildScript("""
+            withBuildScript(
+                """
                 apply(from = "$remoteScriptUrl")
                 val answer: String by extra
                 println("*" + answer + "*")
-            """)
+                """
+            )
 
             assert(build().output.contains("*42*"))
         }
@@ -626,15 +722,20 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
 
         withZip(
             "fixture.jar",
-            sequenceOf("common.gradle.kts" to scriptFromJar.toByteArray()))
+            sequenceOf("common.gradle.kts" to scriptFromJar.toByteArray())
+        )
 
-        withFile("gradle/answer.gradle.kts", """
+        withFile(
+            "gradle/answer.gradle.kts",
+            """
 
             val answer by extra { "42" }
 
-        """)
+            """
+        )
 
-        withBuildScript("""
+        withBuildScript(
+            """
             buildscript {
                 dependencies { classpath(files("fixture.jar")) }
             }
@@ -643,7 +744,8 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
 
             val answer: String by extra
             println("*" + answer + "*")
-        """)
+            """
+        )
 
         assert(build().output.contains("*42*"))
     }
@@ -651,31 +753,44 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
     @Test
     fun `script handler belongs to the current script`() {
 
-        val init = withFile("some.init.gradle.kts", """
+        val init = withFile(
+            "some.init.gradle.kts",
+            """
             println("init: ${'$'}{initscript.sourceFile}")
-        """)
+            """
+        )
 
-        val settings = withSettings("""
+        val settings = withSettings(
+            """
             println("settings: ${'$'}{buildscript.sourceFile}")
-        """)
+            """
+        )
 
-        val other = withFile("other.gradle.kts", """
+        val other = withFile(
+            "other.gradle.kts",
+            """
             println("other: ${'$'}{buildscript.sourceFile}")
-        """)
+            """
+        )
 
-        val main = withBuildScript("""
+        val main = withBuildScript(
+            """
             apply(from = "other.gradle.kts")
             println("main: ${'$'}{buildscript.sourceFile}")
-        """)
+            """
+        )
 
         assertThat(
             build("-I", init.absolutePath, "help", "-q").output,
-            containsMultiLineString("""
+            containsMultiLineString(
+                """
                 init: ${init.absolutePath}
                 settings: ${settings.absolutePath}
                 other: ${other.absolutePath}
                 main: ${main.absolutePath}
-            """))
+                """
+            )
+        )
     }
 
     @Test
@@ -685,7 +800,9 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
         withClassJar("light.jar", LightThought::class.java)
         withClassJar("deep.jar", DeepThought::class.java)
 
-        val init = withFile("some.init.gradle.kts", """
+        val init = withFile(
+            "some.init.gradle.kts",
+            """
             projectsLoaded {
                 rootProject.buildscript {
                     dependencies {
@@ -693,9 +810,11 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
                     }
                 }
             }
-        """)
+            """
+        )
 
-        withSettings("""
+        withSettings(
+            """
             include("sub")
             gradle.projectsLoaded {
                 rootProject.buildscript {
@@ -704,9 +823,11 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
                     }
                 }
             }
-        """)
+            """
+        )
 
-        withBuildScript("""
+        withBuildScript(
+            """
             project(":sub") {
                 buildscript {
                     dependencies {
@@ -714,9 +835,12 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
                     }
                 }
             }
-        """)
+            """
+        )
 
-        withFile("sub/build.gradle.kts", """
+        withFile(
+            "sub/build.gradle.kts",
+            """
             task("think") {
                 doLast {
                     val zero = ${ZeroThought::class.qualifiedName}()
@@ -727,25 +851,31 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
                     println("*" + deep.compute() + "*")
                 }
             }
-        """)
+            """
+        )
 
         assertThat(
             build("-I", init.absolutePath, ":sub:think").output,
-            containsMultiLineString("""
+            containsMultiLineString(
+                """
                 *0*
                 *23*
                 *42*
-            """))
+                """
+            )
+        )
     }
 
     @Test
     @LeaksFileHandles("Kotlin Compiler Daemon working directory")
-    @ToBeFixedForInstantExecution(because = "Kotlin Gradle Plugin")
+    @ToBeFixedForConfigurationCache(because = "Kotlin Gradle Plugin")
     fun `given generic extension types they can be accessed and configured`() {
 
         withDefaultSettingsIn("buildSrc")
 
-        withFile("buildSrc/build.gradle.kts", """
+        withFile(
+            "buildSrc/build.gradle.kts",
+            """
 
             plugins {
                 `kotlin-dsl`
@@ -761,9 +891,12 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
             }
 
             $repositoriesBlock
-        """)
+            """
+        )
 
-        withFile("buildSrc/src/main/kotlin/my/MyPlugin.kt", """
+        withFile(
+            "buildSrc/src/main/kotlin/my/MyPlugin.kt",
+            """
             package my
 
             import org.gradle.api.*
@@ -778,9 +911,11 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
                     extensions.add(typeOf<NamedDomainObjectContainer<Book>>(), "books", container(Book::class))
                 }
             }
-        """)
+            """
+        )
 
-        withBuildScript("""
+        withBuildScript(
+            """
             plugins {
                 id("my")
             }
@@ -801,22 +936,25 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
                 create("The Dosadi experiment")
             }
             require(the<NamedDomainObjectContainer<my.Book>>().size == 1)
-        """)
+            """
+        )
 
         build("help")
     }
 
     @Test
-    @ToBeFixedForInstantExecution(because = "Task.getProject() during execution")
+    @ToBeFixedForConfigurationCache(because = "Task.getProject() during execution")
     fun `can use kotlin java8 inline-only methods`() {
 
-        withBuildScript("""
+        withBuildScript(
+            """
             task("test") {
                 doLast {
                     println(project.properties.getOrDefault("non-existent-property", "default-value"))
                 }
             }
-        """)
+            """
+        )
 
         assertThat(
             build("-q", "test").output.trim(),
@@ -827,14 +965,19 @@ class GradleKotlinDslIntegrationTest : AbstractPluginIntegrationTest() {
     @Test
     fun `can apply script plugin with package name`() {
 
-        withFile("gradle/script.gradle.kts", """
+        withFile(
+            "gradle/script.gradle.kts",
+            """
             package gradle
             task("ok") { doLast { println("ok!") } }
-        """)
+            """
+        )
 
-        withBuildScript("""
+        withBuildScript(
+            """
             apply(from = "gradle/script.gradle.kts")
-        """)
+            """
+        )
 
         assertThat(
             build("-q", "ok").output.trim(),

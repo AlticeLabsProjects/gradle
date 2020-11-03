@@ -47,26 +47,27 @@ public class DefaultPerformanceExecutionDataProvider extends PerformanceExecutio
         .thenComparing(comparing(ScenarioBuildResultData::isAboutToRegress).reversed())
         .thenComparing(comparing(ScenarioBuildResultData::getDifferenceSortKey).reversed())
         .thenComparing(comparing(ScenarioBuildResultData::getDifferencePercentage).reversed())
-        .thenComparing(ScenarioBuildResultData::getScenarioName);
+        .thenComparing(ScenarioBuildResultData::getPerformanceExperiment);
 
-    public DefaultPerformanceExecutionDataProvider(ResultsStore resultsStore, File resultsJson) {
-        super(resultsStore, resultsJson);
+    public DefaultPerformanceExecutionDataProvider(ResultsStore resultsStore, List<File> resultJsons) {
+        super(resultsStore, resultJsons);
     }
 
     @Override
     protected TreeSet<ScenarioBuildResultData> queryExecutionData(List<ScenarioBuildResultData> scenarioList) {
         // scenarioList contains duplicate scenarios because of rerun
         return scenarioList.stream()
-            .collect(groupingBy(ScenarioBuildResultData::getScenarioName))
+            .collect(groupingBy(ScenarioBuildResultData::getPerformanceExperiment))
             .values()
             .stream()
-            .map(this::queryAndSortExecutionData).collect(treeSetCollector(SCENARIO_COMPARATOR));
+            .map(this::queryAndSortExecutionData)
+            .collect(treeSetCollector(SCENARIO_COMPARATOR));
     }
 
     private ScenarioBuildResultData queryAndSortExecutionData(List<ScenarioBuildResultData> scenarios) {
         ScenarioBuildResultData mergedScenario = mergeScenarioWithSameName(scenarios);
 
-        PerformanceTestHistory history = resultsStore.getTestResults(scenarios.get(0).getScenarioName(), DEFAULT_RETRY_COUNT, PERFORMANCE_DATE_RETRIEVE_DAYS, ResultsStoreHelper.determineChannel());
+        PerformanceTestHistory history = resultsStore.getTestResults(scenarios.get(0).getPerformanceExperiment(), DEFAULT_RETRY_COUNT, PERFORMANCE_DATE_RETRIEVE_DAYS, ResultsStoreHelper.determineChannel());
         List<? extends PerformanceTestExecution> recentExecutions = history.getExecutions();
 
         scenarios.forEach(scenario -> setExecutions(scenario, singletonList(scenario.getTeamCityBuildId()), recentExecutions));
@@ -96,6 +97,8 @@ public class DefaultPerformanceExecutionDataProvider extends PerformanceExecutio
         } else {
             ScenarioBuildResultData mergedScenario = new ScenarioBuildResultData();
             mergedScenario.setScenarioName(scenariosWithSameName.get(0).getScenarioName());
+            mergedScenario.setTestProject(scenariosWithSameName.get(0).getTestProject());
+            mergedScenario.setScenarioClass(scenariosWithSameName.get(0).getScenarioClass());
             mergedScenario.setRawData(scenariosWithSameName);
             mergedScenario.setStatus(determineMergedScenarioStatus(scenariosWithSameName));
             return mergedScenario;

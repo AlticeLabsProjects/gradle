@@ -46,8 +46,7 @@ import org.gradle.internal.operations.CallableBuildOperation
 import org.gradle.internal.scripts.CompileScriptBuildOperationType.Details
 import org.gradle.internal.scripts.CompileScriptBuildOperationType.Result
 import org.gradle.internal.scripts.ScriptExecutionListener
-
-import org.gradle.kotlin.dsl.accessors.pluginSpecBuildersClassPath
+import org.gradle.kotlin.dsl.accessors.PluginAccessorClassPathGenerator
 
 import org.gradle.kotlin.dsl.cache.ScriptCache
 import org.gradle.kotlin.dsl.execution.CompiledScript
@@ -61,6 +60,7 @@ import org.gradle.kotlin.dsl.support.EmbeddedKotlinProvider
 import org.gradle.kotlin.dsl.support.ImplicitImports
 import org.gradle.kotlin.dsl.support.KotlinScriptHost
 import org.gradle.kotlin.dsl.support.ScriptCompilationException
+import org.gradle.kotlin.dsl.support.serviceOf
 
 import org.gradle.plugin.management.internal.PluginRequests
 
@@ -97,7 +97,7 @@ class StandardKotlinScriptEvaluator(
     private val classPathModeExceptionCollector: ClassPathModeExceptionCollector,
     private val kotlinScriptBasePluginsApplicator: KotlinScriptBasePluginsApplicator,
     private val scriptSourceHasher: ScriptSourceHasher,
-    private val classPathHasher: ClasspathHasher,
+    private val classpathHasher: ClasspathHasher,
     private val scriptCache: ScriptCache,
     private val implicitImports: ImplicitImports,
     private val progressLoggerFactory: ProgressLoggerFactory,
@@ -155,7 +155,8 @@ class StandardKotlinScriptEvaluator(
 
         override fun pluginAccessorsFor(scriptHost: KotlinScriptHost<*>): ClassPath =
             (scriptHost.target as? Project)?.let {
-                pluginSpecBuildersClassPath(it).bin
+                val pluginAccessorClassPathGenerator = it.serviceOf<PluginAccessorClassPathGenerator>()
+                pluginAccessorClassPathGenerator.pluginSpecBuildersClassPath(it).bin
             } ?: ClassPath.EMPTY
 
         override fun runCompileBuildOperation(scriptPath: String, stage: String, action: () -> String): String =
@@ -192,14 +193,15 @@ class StandardKotlinScriptEvaluator(
         }
 
         override fun hashOf(classPath: ClassPath): HashCode =
-            classPathHasher.hash(classPath)
+            classpathHasher.hash(classPath)
 
         override fun applyPluginsTo(scriptHost: KotlinScriptHost<*>, pluginRequests: PluginRequests) {
             pluginRequestsHandler.handle(
                 pluginRequests,
                 scriptHost.scriptHandler as ScriptHandlerInternal,
                 scriptHost.target as PluginAwareInternal,
-                scriptHost.targetScope)
+                scriptHost.targetScope
+            )
         }
 
         override fun applyBasePluginsTo(project: Project) {
@@ -235,13 +237,13 @@ class StandardKotlinScriptEvaluator(
             scriptHost: KotlinScriptHost<*>,
             templateId: String,
             sourceHash: HashCode,
-            parentClassLoader: ClassLoader,
+            compilationClassPathHash: HashCode,
             accessorsClassPath: ClassPath?,
             initializer: (File) -> Unit
         ): File = try {
 
             val baseCacheKey =
-                cacheKeySpecPrefix + templateId + sourceHash + parentClassLoader
+                cacheKeySpecPrefix + templateId + sourceHash + compilationClassPathHash
 
             val effectiveCacheKey =
                 accessorsClassPath?.let { baseCacheKey + it }

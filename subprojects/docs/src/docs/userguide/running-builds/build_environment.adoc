@@ -50,7 +50,7 @@ When set to true, Gradle will reuse task outputs from any previous build, when p
 When set to true, individual input property hashes and the build cache key for each task are logged on the console. Learn more about <<build_cache.adoc#sec:task_output_caching, task output caching>>.
 
 `org.gradle.configureondemand=(true,false)`::
-Enables incubating <<multi_project_builds.adoc#sec:configuration_on_demand, configuration on demand>>, where Gradle will attempt to configure only necessary projects.
+Enables incubating <<multi_project_configuration_and_execution.adoc#sec:configuration_on_demand, configuration on demand>>, where Gradle will attempt to configure only necessary projects.
 
 `org.gradle.console=(auto,plain,rich,verbose)`::
 Customize console output coloring or verbosity. Default depends on how Gradle is invoked. See <<command_line_interface.adoc#sec:command_line_logging, command-line logging>> for additional details.
@@ -74,12 +74,16 @@ Specifies the JVM arguments used for the Gradle Daemon. The setting is particula
 When set to quiet, warn, lifecycle, info, or debug, Gradle will use this log level. The values are not case sensitive. The `lifecycle` level is the default. See <<logging.adoc#sec:choosing_a_log_level,Choosing a log level>>.
 
 `org.gradle.parallel=(true,false)`::
-When configured, Gradle will fork up to `org.gradle.workers.max` JVMs to execute projects in parallel. To learn more about parallel task execution, see link:https://guides.gradle.org/performance/#parallel_execution[the Gradle performance guide].
+When configured, Gradle will fork up to `org.gradle.workers.max` JVMs to execute projects in parallel. To learn more about parallel task execution, see <<performance.adoc#parallel_execution,the section on Gradle build performance>>.
 
 `org.gradle.priority=(low,normal)`::
 Specifies the scheduling priority for the Gradle daemon and all processes launched by it. Default is `normal`. See also <<command_line_interface.adoc#sec:command_line_performance, performance command-line options>>.
 
-`org.gradle.unsafe.watch-fs=(true,false)`::
+`org.gradle.vfs.verbose=(true,false)`::
+Configures verbose logging when <<gradle_daemon.adoc#sec:daemon_watch_fs,watching the file system>>.
+_Default is off_.
+
+`org.gradle.vfs.watch=(true,false)`::
 Toggles <<gradle_daemon.adoc#sec:daemon_watch_fs,watching the file system>>.
 Allows Gradle to re-use information about the file system in the next build.
 _Default is off_.
@@ -128,6 +132,8 @@ Specify user name to download Gradle distributions from servers using HTTP Basic
 Specify password for downloading a Gradle distribution using the Gradle wrapper.
 `gradle.user.home=(path to directory)`::
 Specify the Gradle user home directory.
+`https.protocols`::
+Specify the supported TLS versions in a comma separated format. For example: `TLSv1.2,TLSv1.3`.
 
 In a multi project build, “`systemProp.`” properties set in any project except the root will be ignored. That is, only the root project's `gradle.properties` file will be checked for properties that begin with the “`systemProp.`” prefix.
 

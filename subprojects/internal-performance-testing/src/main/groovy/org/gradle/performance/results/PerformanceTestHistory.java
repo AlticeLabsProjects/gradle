@@ -30,13 +30,17 @@ public interface PerformanceTestHistory {
     }
 
     static String convertToId(String displayName) {
-        return displayName.replaceAll("\\s+", "-").replaceAll("/", "-");
+        return displayName.replaceAll("[^a-zA-Z0-9]", "-");
     }
 
     /**
      * A human consumable display name for this performance test.
      */
-    String getDisplayName();
+    default String getDisplayName() {
+        return getExperiment().getDisplayName();
+    }
+
+    PerformanceExperiment getExperiment();
 
     /**
      * The results of all executions of this performance test, ordered from most recent to least recent.

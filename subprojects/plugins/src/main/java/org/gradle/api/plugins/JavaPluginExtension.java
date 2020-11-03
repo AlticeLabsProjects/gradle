@@ -37,8 +37,12 @@ public interface JavaPluginExtension {
 
     /**
      * Sets the source compatibility used for compiling Java sources.
+     * <p>
+     * This property cannot be set if a {@link #getToolchain() toolchain} has been configured.
      *
      * @param value The value for the source compatibility
+     *
+     * @see #toolchain(Action)
      */
     void setSourceCompatibility(JavaVersion value);
 
@@ -49,8 +53,12 @@ public interface JavaPluginExtension {
 
     /**
      * Sets the target compatibility used for compiling Java sources.
+     * <p>
+     * This property cannot be set if a {@link #getToolchain() toolchain} has been configured.
      *
      * @param value The value for the target compatibility
+     *
+     * @see #toolchain(Action)
      */
     void setTargetCompatibility(JavaVersion value);
 
@@ -130,10 +138,22 @@ public interface JavaPluginExtension {
 
     /**
      * Configure the toolchain requirements for tasks that require a tool from the toolchain (e.g. {@link org.gradle.api.tasks.compile.JavaCompile}.
+     * <p>
+     * Configuring a toolchain makes it illegal to set the {@code sourceCompatibility} or {@code targetCompatibility}.
      *
      * @since 6.7
      */
     @Incubating
     JavaToolchainSpec toolchain(Action<? super JavaToolchainSpec> action);
+
+    /**
+     * Configure the dependency resolution consistency for this Java project.
+     *
+     * @param action the configuration action
+     *
+     * @since 6.8
+     */
+    @Incubating
+    void consistentResolution(Action<? super JavaResolutionConsistency> action);
 
 }

@@ -33,9 +33,9 @@ JetBrains supports building https://blog.jetbrains.com/clion/2018/05/clion-start
 
 We have dedicated guides showing you how to integrate a Gradle project with the following CI platforms:
 
- * https://guides.gradle.org/executing-gradle-builds-on-jenkins[Jenkins]
- * https://guides.gradle.org/executing-gradle-builds-on-teamcity[TeamCity]
- * https://guides.gradle.org/executing-gradle-builds-on-travisci[Travis CI]
+ * <<jenkins.adoc#,Jenkins>>
+ * <<teamcity.adoc#,TeamCity>>
+ * <<travis-ci.adoc#,Travis CI>>
 
 Even if you don't use one of the above, you can almost certainly configure your CI platform to use the <<gradle_wrapper.adoc#,Gradle Wrapper>> scripts.
 
@@ -86,7 +86,7 @@ The Tooling API always uses the Gradle daemon. This means that subsequent calls 
 [[sec:embedding_quickstart]]
 === Quickstart
 
-As the Tooling API is an interface for developers, the Javadoc is the main documentation for it. 
+As the Tooling API is an interface for developers, the Javadoc is the main documentation for it.
 
 To use the Tooling API, add the following repository and dependency declarations to your build script:
 
@@ -106,3 +106,9 @@ The Tooling API requires Java 8 or later. The Gradle version used by builds may 
 The Tooling API supports running builds using Gradle 2.6 and later. Gradle 5.0 and up require clients to use Tooling API version 3.0 or later.
 
 You should note that not all features of the Tooling API are available for all versions of Gradle. Refer to the documentation for each class and method for more details.
+
+In general, the Tooling API client can run on a different version of Java than the build, but classes that are sent to the build via custom build actions need to be targeted to the lowest supported Java version.
+
+- Gradle 2.6-2.14.1 only supports Java 6 through Java 8.
+- Gradle 3.x and 4.x require a minimum version of Java 7.
+- Gradle 5 and above require a minimum version of Java 8.

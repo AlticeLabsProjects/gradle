@@ -17,42 +17,45 @@
 package org.gradle.launcher.exec;
 
 import org.gradle.api.internal.BuildDefinition;
-import org.gradle.initialization.BuildRequestContext;
+import org.gradle.initialization.BuildCancellationToken;
 import org.gradle.internal.build.BuildStateRegistry;
 import org.gradle.internal.build.RootBuildState;
+import org.gradle.internal.buildtree.BuildTreeContext;
 import org.gradle.internal.invocation.BuildAction;
 import org.gradle.internal.invocation.BuildActionRunner;
 import org.gradle.internal.operations.notify.BuildOperationNotificationValve;
-import org.gradle.internal.service.ServiceRegistry;
-import org.gradle.internal.watch.vfs.FileSystemWatchingHandler;
 import org.gradle.tooling.internal.provider.serialization.PayloadSerializer;
 
-public class InProcessBuildActionExecuter implements BuildActionExecuter<BuildActionParameters> {
+public class InProcessBuildActionExecuter implements BuildTreeBuildActionExecutor {
     private final BuildActionRunner buildActionRunner;
+    private final BuildStateRegistry buildStateRegistry;
+    private final PayloadSerializer payloadSerializer;
+    private final BuildOperationNotificationValve buildOperationNotificationValve;
+    private final BuildCancellationToken buildCancellationToken;
 
-    public InProcessBuildActionExecuter(BuildActionRunner buildActionRunner) {
+    public InProcessBuildActionExecuter(BuildStateRegistry buildStateRegistry,
+                                        PayloadSerializer payloadSerializer,
+                                        BuildOperationNotificationValve buildOperationNotificationValve,
+                                        BuildCancellationToken buildCancellationToken,
+                                        BuildActionRunner buildActionRunner) {
         this.buildActionRunner = buildActionRunner;
+        this.buildStateRegistry = buildStateRegistry;
+        this.payloadSerializer = payloadSerializer;
+        this.buildOperationNotificationValve = buildOperationNotificationValve;
+        this.buildCancellationToken = buildCancellationToken;
     }
 
     @Override
-    public BuildActionResult execute(final BuildAction action, final BuildRequestContext buildRequestContext, BuildActionParameters actionParameters, ServiceRegistry contextServices) {
-        BuildStateRegistry buildRegistry = contextServices.get(BuildStateRegistry.class);
-        final PayloadSerializer payloadSerializer = contextServices.get(PayloadSerializer.class);
-        BuildOperationNotificationValve buildOperationNotificationValve = contextServices.get(BuildOperationNotificationValve.class);
-
+    public BuildActionResult execute(BuildAction action, BuildActionParameters actionParameters, BuildTreeContext buildTree) {
         buildOperationNotificationValve.start();
         try {
-            // This statement ensures the creation of the FileSystemWatchingHandler.
-            // We need to enforce the creation of it, so that the BuildAddedListener is registered early enough by the creation method.
-            // If not, it won't receive the addition of the root build, which happens here..
-            contextServices.get(FileSystemWatchingHandler.class);
-            RootBuildState rootBuild = buildRegistry.createRootBuild(BuildDefinition.fromStartParameter(action.getStartParameter(), null));
+            RootBuildState rootBuild = buildStateRegistry.createRootBuild(BuildDefinition.fromStartParameter(action.getStartParameter(), null));
             return rootBuild.run(buildController -> {
                 BuildActionRunner.Result result = buildActionRunner.run(action, buildController);
                 if (result.getBuildFailure() == null) {
                     return BuildActionResult.of(payloadSerializer.serialize(result.getClientResult()));
                 }
-                if (buildRequestContext.getCancellationToken().isCancellationRequested()) {
+                if (buildCancellationToken.isCancellationRequested()) {
                     return BuildActionResult.cancelled(payloadSerializer.serialize(result.getBuildFailure()));
                 }
                 return BuildActionResult.failed(payloadSerializer.serialize(result.getClientFailure()));

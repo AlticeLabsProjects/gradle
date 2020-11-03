@@ -133,18 +133,25 @@ Samples and output belong under `src/samples` and are published beside the user 
 
 To run the samples tests:
 ```
-./gradlew :docs:docsTest --tests "org.gradle.docs.samples.ExemplarExternalSamplesFunctionalTest.*"
+./gradlew :docs:docsTest --tests "org.gradle.docs.samples.*.*"
 ```
 
 To run tests for a single sample, let's say from `samples/java/application`:
 ```
-./gradlew :docs:docsTest --tests "org.gradle.docs.samples.ExemplarExternalSamplesFunctionalTest.java-application*"
+./gradlew :docs:docsTest --tests "org.gradle.docs.samples.DependencyManagementSnippetsTest.java-application*"
 ```
 
-To run tests for a single snippet, let's say from `snippets/base/distribution`:
+To run tests for a single snippet:
+
+Let's say you want to run the snippet found at `src/snippets/dependencyManagement/customizingResolution-consistentResolution`.
+
+then you can run the followng command line:
+
 ```
-./gradlew :docs:docsTest --tests "org.gradle.docs.samples.ExemplarExternalSamplesFunctionalTest.snippet-base-distribution*"
+   ./gradlew :docs:docsTest --tests "*.snippet-dependency-management-customizing-resolution-consistent-resolution*"
 ```
+
+which would run both Groovy and Kotlin tests.
 
 ## Groovy DSL Reference
 

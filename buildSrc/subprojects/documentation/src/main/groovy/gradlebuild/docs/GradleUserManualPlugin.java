@@ -160,12 +160,12 @@ public class GradleUserManualPlugin implements Plugin<Project> {
 
             attributes.put("antManual", "https://ant.apache.org/manual");
             attributes.put("docsUrl", "https://docs.gradle.org");
-            attributes.put("guidesUrl", "https://guides.gradle.org");
 
             // TODO: This breaks if the version is changed later.
             attributes.put("gradleVersion", project.getVersion().toString());
             attributes.put("snippetsPath", "snippets");
-            attributes.put("samplesPath", "samples");
+            // Make sure the 'raw' location of the samples is available in all AsciidoctorTasks to access files with expected outputs in the 'tests' folder for inclusion in READMEs
+            attributes.put("samplesPath", extension.getUserManual().getStagingRoot().dir("raw/samples").get().getAsFile());
             task.attributes(attributes);
         });
 
@@ -192,7 +192,7 @@ public class GradleUserManualPlugin implements Plugin<Project> {
             });
             task.from(extension.getCssFiles(), sub -> sub.into("css"));
             task.from(extension.getUserManual().getRoot().dir("img"), sub -> {
-                sub.include("**/*.png", "**/*.gif", "**/*.jpg");
+                sub.include("**/*.png", "**/*.gif", "**/*.jpg", "**/*.svg");
                 sub.into("img");
             });
             task.from(extension.getUserManual().getResources());
@@ -270,7 +270,6 @@ public class GradleUserManualPlugin implements Plugin<Project> {
             attributes.put("toc-title", "Contents");
             attributes.put("groovyDslPath", "../dsl");
             attributes.put("javadocPath", "../javadoc");
-            attributes.put("samplesPath", "../samples");
             attributes.put("kotlinDslPath", "https://gradle.github.io/kotlin-dsl-docs/api");
             // Used by SampleIncludeProcessor from `gradle/dotorg-docs`
             // TODO: This breaks the provider
@@ -288,7 +287,7 @@ public class GradleUserManualPlugin implements Plugin<Project> {
             task.into(extension.getUserManual().getStagingRoot().dir("final"));
             // TODO: Eliminate this duplication with the flatten task
             task.from(extension.getUserManual().getRoot().dir("img"), sub -> {
-                sub.include("**/*.png", "**/*.gif", "**/*.jpg");
+                sub.include("**/*.png", "**/*.gif", "**/*.jpg", "**/*.svg");
                 sub.into("img");
             });
 

@@ -68,6 +68,8 @@ import org.gradle.jvm.internal.toolchain.JavaToolChainInternal;
 import org.gradle.jvm.platform.JavaPlatform;
 import org.gradle.jvm.platform.internal.DefaultJavaPlatform;
 import org.gradle.jvm.toolchain.JavaCompiler;
+import org.gradle.jvm.toolchain.JavaInstallationMetadata;
+import org.gradle.jvm.toolchain.JavaLanguageVersion;
 import org.gradle.jvm.toolchain.JavaToolChain;
 import org.gradle.jvm.toolchain.internal.DefaultToolchainJavaCompiler;
 import org.gradle.language.base.internal.compile.Compiler;
@@ -75,6 +77,7 @@ import org.gradle.language.base.internal.compile.CompilerUtil;
 import org.gradle.work.Incremental;
 import org.gradle.work.InputChanges;
 
+import javax.annotation.Nullable;
 import javax.inject.Inject;
 import java.io.File;
 import java.util.List;
@@ -105,15 +108,16 @@ public class JavaCompile extends AbstractCompile implements HasCompileOptions {
     private final FileCollection stableSources = getProject().files((Callable<Object[]>) () -> new Object[]{getSource(), getSources()});
     private final ModularitySpec modularity;
     private File sourceClassesMappingFile;
-    private Property<JavaCompiler> javaCompiler;
+    private final Property<JavaCompiler> javaCompiler;
 
     public JavaCompile() {
         Project project = getProject();
-        ObjectFactory objects = project.getObjects();
-        compileOptions = objects.newInstance(CompileOptions.class);
+        ObjectFactory objectFactory = project.getObjects();
+        compileOptions = objectFactory.newInstance(CompileOptions.class);
         CompilerForkUtils.doNotCacheIfForkingViaExecutable(compileOptions, getOutputs());
-        modularity = objects.newInstance(DefaultModularitySpec.class);
-        javaCompiler = objects.property(JavaCompiler.class);
+        modularity = objectFactory.newInstance(DefaultModularitySpec.class);
+        javaCompiler = objectFactory.property(JavaCompiler.class);
+        javaCompiler.finalizeValueOnRead();
     }
 
     /**
@@ -144,6 +148,7 @@ public class JavaCompile extends AbstractCompile implements HasCompileOptions {
      * @return The tool chain.
      */
     @Nested
+    @Deprecated
     public JavaToolChain getToolChain() {
         if (toolChain != null) {
             return toolChain;
@@ -156,6 +161,7 @@ public class JavaCompile extends AbstractCompile implements HasCompileOptions {
      *
      * @param toolChain The tool chain.
      */
+    @Deprecated
     public void setToolChain(JavaToolChain toolChain) {
         this.toolChain = toolChain;
     }
@@ -163,13 +169,13 @@ public class JavaCompile extends AbstractCompile implements HasCompileOptions {
     /**
      * Configures the java compiler to be used to compile the Java source.
      *
+     * @see org.gradle.jvm.toolchain.JavaToolchainSpec
      * @since 6.7
      */
     @Incubating
     @Nested
     @Optional
     public Property<JavaCompiler> getJavaCompiler() {
-        // TODO: add proper @see tags once the DSL is available
         return javaCompiler;
     }
 
@@ -202,6 +208,14 @@ public class JavaCompile extends AbstractCompile implements HasCompileOptions {
             performFullCompilation(spec);
         } else {
             performIncrementalCompilation(inputs, spec);
+        }
+    }
+
+    private void validateConfiguration() {
+        if (javaCompiler.isPresent()) {
+            checkState(toolChain == null, "Must not use `javaCompiler` property together with (deprecated) `toolchain`");
+            checkState(getOptions().getForkOptions().getJavaHome() == null, "Must not use `javaHome` property on `ForkOptions` together with `javaCompiler` property");
+            checkState(getOptions().getForkOptions().getExecutable() == null, "Must not use `exectuable` property on `ForkOptions` together with `javaCompiler` property");
         }
     }
 
@@ -297,9 +311,6 @@ public class JavaCompile extends AbstractCompile implements HasCompileOptions {
     }
 
     private Compiler<JavaCompileSpec> useNewToolchainCompiler() {
-        checkState(toolChain == null, "Must not use `javaCompiler` property together with (deprecated) `toolchain`");
-        checkState(getOptions().getForkOptions().getJavaHome() == null, "Must not use `javaHome` property on `ForkOptions` together with `javaCompiler` property");
-        checkState(getOptions().getForkOptions().getExecutable() == null, "Must not use `exectuable` property on `ForkOptions` together with `javaCompiler` property");
         return spec -> ((DefaultToolchainJavaCompiler) javaCompiler.get()).execute(spec);
     }
 
@@ -308,6 +319,7 @@ public class JavaCompile extends AbstractCompile implements HasCompileOptions {
     }
 
     @Nested
+    @Deprecated
     protected JavaPlatform getPlatform() {
         return new DefaultJavaPlatform(JavaVersion.toVersion(getTargetCompatibility()));
     }
@@ -334,12 +346,14 @@ public class JavaCompile extends AbstractCompile implements HasCompileOptions {
         return result;
     }
 
-    private DefaultJavaCompileSpec createSpec() {
+    DefaultJavaCompileSpec createSpec() {
+        validateConfiguration();
         List<File> sourcesRoots = CompilationSourceDirs.inferSourceRoots((FileTreeInternal) getStableSources().getAsFileTree());
         JavaModuleDetector javaModuleDetector = getJavaModuleDetector();
         boolean isModule = JavaModuleDetector.isModuleSource(modularity.getInferModulePath().get(), sourcesRoots);
 
-        final DefaultJavaCompileSpec spec = new DefaultJavaCompileSpecFactory(compileOptions).create();
+        final DefaultJavaCompileSpec spec = createBaseSpec();
+
         spec.setDestinationDir(getDestinationDirectory().getAsFile().get());
         spec.setWorkingDir(getProjectLayout().getProjectDirectory().getAsFile());
         spec.setTempDir(getTemporaryDir());
@@ -349,18 +363,72 @@ public class JavaCompile extends AbstractCompile implements HasCompileOptions {
             compileOptions.setSourcepath(getProjectLayout().files(sourcesRoots));
         }
         spec.setAnnotationProcessorPath(compileOptions.getAnnotationProcessorPath() == null ? ImmutableList.of() : ImmutableList.copyOf(compileOptions.getAnnotationProcessorPath()));
-        if (compileOptions.getRelease().isPresent()) {
+        configureCompatibilityOptions(spec);
+        spec.setSourcesRoots(sourcesRoots);
+        if (!isToolchainCompatibleWithJava8()) {
+            spec.getCompileOptions().setHeaderOutputDirectory(null);
+        }
+        return spec;
+    }
+
+    private boolean isToolchainCompatibleWithJava8() {
+        if (javaCompiler.isPresent()) {
+            return getToolchain().getLanguageVersion().canCompileOrRun(8);
+        }
+        return ((JavaToolChainInternal) getToolChain()).getJavaVersion().isJava8Compatible();
+    }
+
+    private DefaultJavaCompileSpec createBaseSpec() {
+        final ForkOptions forkOptions = compileOptions.getForkOptions();
+        if (javaCompiler.isPresent()) {
+            applyToolchain(forkOptions);
+        }
+        return new DefaultJavaCompileSpecFactory(compileOptions, getToolchain()).create();
+    }
+
+    private void applyToolchain(ForkOptions forkOptions) {
+        final JavaInstallationMetadata metadata = getToolchain();
+        forkOptions.setJavaHome(metadata.getInstallationPath().getAsFile());
+    }
+
+    @Nullable
+    private JavaInstallationMetadata getToolchain() {
+        return javaCompiler.map(JavaCompiler::getMetadata).getOrNull();
+    }
+
+    private void configureCompatibilityOptions(DefaultJavaCompileSpec spec) {
+        final JavaInstallationMetadata toolchain = getToolchain();
+        if (toolchain != null) {
+            if (compileOptions.getRelease().isPresent()) {
+                spec.setRelease(compileOptions.getRelease().get());
+            } else {
+                boolean isSourceOrTargetConfigured = false;
+                if (super.getSourceCompatibility() != null) {
+                    spec.setSourceCompatibility(getSourceCompatibility());
+                    isSourceOrTargetConfigured = true;
+                }
+                if (super.getTargetCompatibility() != null) {
+                    spec.setTargetCompatibility(getTargetCompatibility());
+                    isSourceOrTargetConfigured = true;
+                }
+                if (!isSourceOrTargetConfigured) {
+                    JavaLanguageVersion languageVersion = toolchain.getLanguageVersion();
+                    if (languageVersion.canCompileOrRun(10)) {
+                        spec.setRelease(languageVersion.asInt());
+                    } else {
+                        String version = languageVersion.toString();
+                        spec.setSourceCompatibility(version);
+                        spec.setTargetCompatibility(version);
+                    }
+                }
+            }
+        } else if (compileOptions.getRelease().isPresent()) {
             spec.setRelease(compileOptions.getRelease().get());
         } else {
             spec.setTargetCompatibility(getTargetCompatibility());
             spec.setSourceCompatibility(getSourceCompatibility());
         }
         spec.setCompileOptions(compileOptions);
-        spec.setSourcesRoots(sourcesRoots);
-        if (((JavaToolChainInternal) getToolChain()).getJavaVersion().compareTo(JavaVersion.VERSION_1_8) < 0) {
-            spec.getCompileOptions().setHeaderOutputDirectory(null);
-        }
-        return spec;
     }
 
     /**

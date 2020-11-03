@@ -23,8 +23,6 @@ import spock.lang.Unroll
 
 class TaskDefinitionIntegrationTest extends AbstractIntegrationSpec {
     private static final String CUSTOM_TASK_WITH_CONSTRUCTOR_ARGS = """
-        import javax.inject.Inject
-
         class CustomTask extends DefaultTask {
             @Internal
             final String message
@@ -168,7 +166,7 @@ class TaskDefinitionIntegrationTest extends AbstractIntegrationSpec {
         """
 
         expect:
-        executer.expectDocumentedDeprecationWarning("Registering a task with type AbstractTask has been deprecated. This will fail with an error in Gradle 7.0. Consult the upgrading guide for further information: https://docs.gradle.org/current/userguide/upgrading_version_6.html#abstract_task_deprecated")
+        executer.expectDocumentedDeprecationWarning("Registering task ':thing' with type 'AbstractTask' has been deprecated. This will fail with an error in Gradle 7.0. Consult the upgrading guide for further information: https://docs.gradle.org/current/userguide/upgrading_version_6.html#abstract_task_deprecated")
         succeeds("thing")
     }
 
@@ -181,7 +179,7 @@ class TaskDefinitionIntegrationTest extends AbstractIntegrationSpec {
         """
 
         expect:
-        executer.expectDocumentedDeprecationWarning("Registering a task with type TaskInternal has been deprecated. This will fail with an error in Gradle 7.0. Consult the upgrading guide for further information: https://docs.gradle.org/current/userguide/upgrading_version_6.html#abstract_task_deprecated")
+        executer.expectDocumentedDeprecationWarning("Registering task ':thing' with type 'TaskInternal' has been deprecated. This will fail with an error in Gradle 7.0. Consult the upgrading guide for further information: https://docs.gradle.org/current/userguide/upgrading_version_6.html#abstract_task_deprecated")
         succeeds("thing")
     }
 
@@ -195,7 +193,7 @@ class TaskDefinitionIntegrationTest extends AbstractIntegrationSpec {
         """
 
         expect:
-        executer.expectDocumentedDeprecationWarning("Registering a task with a type that directly extends AbstractTask has been deprecated. This will fail with an error in Gradle 7.0. Consult the upgrading guide for further information: https://docs.gradle.org/current/userguide/upgrading_version_6.html#abstract_task_deprecated")
+        executer.expectDocumentedDeprecationWarning("Registering task ':thing' with a type (CustomTask) that directly extends AbstractTask has been deprecated. This will fail with an error in Gradle 7.0. Consult the upgrading guide for further information: https://docs.gradle.org/current/userguide/upgrading_version_6.html#abstract_task_deprecated")
         succeeds("thing")
     }
 
@@ -518,7 +516,6 @@ class TaskDefinitionIntegrationTest extends AbstractIntegrationSpec {
         file("build.gradle.kts") << """
             import org.gradle.api.*
             import org.gradle.api.tasks.*
-            import javax.inject.Inject
 
             open class CustomTask @Inject constructor(private val message: String, private val number: Int) : DefaultTask() {
                 @TaskAction fun run() = println("\$message \$number")
@@ -596,7 +593,7 @@ class TaskDefinitionIntegrationTest extends AbstractIntegrationSpec {
             def schema = tasks.collectionSchema.elements.collectEntries { e ->
                 [ e.name, e.publicType.simpleName ]
             }
-            assert (schema.size() == 16 || schema.size() == 18)
+            assert (schema.size() == 17 || schema.size() == 19)
 
             assert schema["help"] == "Help"
 
@@ -612,7 +609,7 @@ class TaskDefinitionIntegrationTest extends AbstractIntegrationSpec {
             assert schema["model"] == "ModelReport"
             assert schema["dependentComponents"] == "DependentComponentsReport"
 
-            if (schema.size() == 18) {
+            if (schema.size() == 19) {
                 assert schema["init"] == "InitBuild"
                 assert schema["wrapper"] == "Wrapper"
             }

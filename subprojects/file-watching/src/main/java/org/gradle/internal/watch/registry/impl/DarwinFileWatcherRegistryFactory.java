@@ -16,8 +16,8 @@
 
 package org.gradle.internal.watch.registry.impl;
 
-import net.rubygrapefruit.platform.Native;
 import net.rubygrapefruit.platform.NativeIntegrationUnavailableException;
+import net.rubygrapefruit.platform.file.FileEvents;
 import net.rubygrapefruit.platform.file.FileWatchEvent;
 import net.rubygrapefruit.platform.file.FileWatcher;
 import net.rubygrapefruit.platform.internal.jni.OsxFileEventFunctions;
@@ -28,11 +28,12 @@ import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 
 public class DarwinFileWatcherRegistryFactory extends AbstractFileWatcherRegistryFactory<OsxFileEventFunctions> {
 
-    public DarwinFileWatcherRegistryFactory() throws NativeIntegrationUnavailableException {
-        super(Native.get(OsxFileEventFunctions.class));
+    public DarwinFileWatcherRegistryFactory(Predicate<String> watchFilter) throws NativeIntegrationUnavailableException {
+        super(FileEvents.get(OsxFileEventFunctions.class), watchFilter);
     }
 
     @Override
@@ -44,8 +45,8 @@ public class DarwinFileWatcherRegistryFactory extends AbstractFileWatcherRegistr
     }
 
     @Override
-    protected FileWatcherUpdater createFileWatcherUpdater(FileWatcher watcher) {
-        return new HierarchicalFileWatcherUpdater(watcher, DarwinFileWatcherRegistryFactory::validateLocationToWatch);
+    protected FileWatcherUpdater createFileWatcherUpdater(FileWatcher watcher, Predicate<String> watchFilter) {
+        return new HierarchicalFileWatcherUpdater(watcher, DarwinFileWatcherRegistryFactory::validateLocationToWatch, watchFilter);
     }
 
     private static void validateLocationToWatch(File location) {

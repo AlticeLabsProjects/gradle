@@ -17,7 +17,7 @@
 package org.gradle.api.reporting.dependents
 
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 
 class DependentComponentsReportIntegrationTest extends AbstractIntegrationSpec {
 
@@ -30,14 +30,14 @@ class DependentComponentsReportIntegrationTest extends AbstractIntegrationSpec {
         run "help", "--task", "dependentComponents"
 
         then:
-        output.contains("Displays the dependent components of components in root project 'test'. [incubating]")
+        output.contains("Displays the dependent components of components in root project 'test'. [deprecated]")
         output.contains("--all     Show all components (non-buildable and test suites).")
         output.contains("--non-buildable     Show non-buildable components.")
         output.contains("--test-suites     Show test suites components.")
         output.contains("--component     Component to generate the report for (can be specified more than once).")
     }
 
-    @ToBeFixedForInstantExecution(because = ":dependentComponents")
+    @ToBeFixedForConfigurationCache(because = ":dependentComponents")
     def "displays empty dependents report for an empty project"() {
         given:
         buildFile

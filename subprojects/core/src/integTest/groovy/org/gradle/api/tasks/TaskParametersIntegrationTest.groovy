@@ -23,8 +23,8 @@ import org.gradle.api.provider.Property
 import org.gradle.api.provider.Provider
 import org.gradle.api.provider.SetProperty
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
 import org.gradle.integtests.fixtures.TestBuildCache
+import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
 import org.gradle.internal.Actions
 import spock.lang.Issue
 import spock.lang.Unroll
@@ -392,7 +392,7 @@ public class SomeTask extends DefaultTask {
     File d;
     @OutputDirectory
     public File getD() { return d; }
-    
+
     @TaskAction
     public void go() { }
 }
@@ -637,7 +637,7 @@ task someTask(type: SomeTask) {
                 public Foo() {
                     getInputs().property("a", null).optional(true);
                 }
-                
+
                 @TaskAction
                 public void doSomething() {}
             }
@@ -651,10 +651,38 @@ task someTask(type: SomeTask) {
         succeeds "foo"
     }
 
-    @ToBeFixedForInstantExecution(because = "task references other task")
     def "input and output properties are not evaluated too often"() {
         buildFile << """
-            import javax.inject.Inject
+            import org.gradle.api.services.BuildServiceParameters
+
+            abstract class EvaluationCountBuildService implements BuildService<BuildServiceParameters.None> {
+                int outputFileCount = 0
+                int inputFileCount = 0
+                int inputValueCount = 0
+                int nestedInputCount = 0
+                int nestedInputValueCount = 0
+
+                void outputFile() {
+                    outputFileCount++
+                }
+
+                void inputFile() {
+                    inputFileCount++
+                }
+
+                void inputValue() {
+                    inputValueCount++
+                }
+
+                void nestedInput() {
+                    nestedInputCount++
+                }
+
+                void nestedInputValue() {
+                    nestedInputValueCount++
+                }
+            }
+            def evaluationCount = project.getGradle().getSharedServices().registerIfAbsent("evaluationCount", EvaluationCountBuildService) {}
 
             @CacheableTask
             abstract class CustomTask extends DefaultTask {
@@ -663,80 +691,85 @@ task someTask(type: SomeTask) {
                 abstract ProjectLayout getLayout()
 
                 @Internal
-                int outputFileCount = 0
-                @Internal
-                int inputFileCount = 0
-                @Internal
-                int inputValueCount = 0
-                @Internal
-                int nestedInputCount = 0
-                @Internal
-                int nestedInputValueCount = 0
+                abstract Property<EvaluationCountBuildService> getEvaluationCountService()
 
                 private NestedBean bean = new NestedBean()
-                
+
                 @OutputFile
                 File getOutputFile() {
-                    count("outputFile", ++outputFileCount)
+                    count("outputFile")
                     return layout.buildDirectory.file("foo.bar").get().asFile
                 }
 
                 @InputFile
                 @PathSensitive(PathSensitivity.NONE)
                 File getInputFile() {
-                    count("inputFile", ++inputFileCount)
+                    count("inputFile")
                     return layout.projectDirectory.file("input.txt").asFile
                 }
-                
+
                 @Input
                 String getInput() {
-                    count("inputValue", ++inputValueCount)
+                    count("inputValue")
                     return "Input"
                 }
-                
+
                 @Nested
                 Object getBean() {
-                    count("nestedInput", ++nestedInputCount)
+                    count("nestedInput")
                     return bean
                 }
-                
+
                 @TaskAction
                 void doStuff() {
                     outputFile.text = inputFile.text
                 }
-                
-                void count(String name, int currentValue) {
-                    println "Evaluating \${name} \${currentValue}"                
+
+                void count(String name) {
+                    def service = evaluationCountService.get()
+                    service."\${name}"()
+                    def currentValue = service."\${name}Count"
+                    println "Evaluating \${name} \${currentValue}"
                 }
-                                
+
                 class NestedBean {
                     @Input getFirst() {
-                        count("nestedInputValue", ++nestedInputValueCount)
+                        count("nestedInputValue")
                         return "first"
                     }
-                    
+
                     @Input getSecond() {
                         return "second"
                     }
                 }
             }
-            
-            task myTask(type: CustomTask)
-            
+
+            task myTask(type: CustomTask) {
+                evaluationCountService = evaluationCount
+            }
+
             task assertInputCounts {
                 dependsOn myTask
+                def propertyNames = ['outputFileCount', 'inputFileCount', 'inputValueCount', 'nestedInputCount', 'nestedInputValueCount']
+                def gradleProperties = propertyNames.collectEntries { [(it) : providers.gradleProperty(it)]}
                 doLast {
                     ['outputFileCount', 'inputFileCount', 'inputValueCount', 'nestedInputCount', 'nestedInputValueCount'].each { name ->
-                        assert myTask."\$name" == providers.gradleProperty(name).get() as Integer
+                        assert evaluationCount.get()."\$name" == gradleProperties[name].get() as Integer
                     }
                 }
             }
         """
         def inputFile = file('input.txt')
         inputFile.text = "input"
-        def expectedCounts = [inputFile: 3, outputFile: 3, nestedInput: 3, inputValue: 1, nestedInputValue: 1]
-        def expectedUpToDateCounts = [inputFile: 2, outputFile: 2, nestedInput: 3, inputValue: 1, nestedInputValue: 1]
+        def expectedCounts = [inputFile: 3, outputFile: 2, nestedInput: 2, inputValue: 1, nestedInputValue: 1]
+        def expectedIncrementalCounts = GradleContextualExecuter.configCache ?
+            [inputFile: 2, outputFile: 2, nestedInput: 1, inputValue: 1, nestedInputValue: 1]
+            : expectedCounts
+        def expectedUpToDateCounts = GradleContextualExecuter.configCache ?
+            [inputFile: 1, outputFile: 1, nestedInput: 1, inputValue: 1, nestedInputValue: 1]
+            : [inputFile: 2, outputFile: 1, nestedInput: 2, inputValue: 1, nestedInputValue: 1]
         def arguments = ["assertInputCounts"] + expectedCounts.collect { name, count -> "-P${name}Count=${count}" }
+        def incrementalBuildArguments = ["assertInputCounts"] + expectedIncrementalCounts.collect { name, count -> "-P${name}Count=${count}" }
         def upToDateArguments = ["assertInputCounts"] + expectedUpToDateCounts.collect { name, count -> "-P${name}Count=${count}" }
         def localCache = new TestBuildCache(file('cache-dir'))
         settingsFile << localCache.localCacheConfiguration()
@@ -748,7 +781,7 @@ task someTask(type: SomeTask) {
         when:
         inputFile.text = "changed"
         then:
-        withBuildCache().succeeds(*arguments)
+        withBuildCache().succeeds(*incrementalBuildArguments)
         executedAndNotSkipped(':myTask')
         and:
         succeeds(*upToDateArguments)

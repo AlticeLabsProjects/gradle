@@ -55,6 +55,11 @@ public class RealisedVariantBackedConfigurationMetadata extends AbstractVariantB
         }
 
         @Override
+        public Identifier getIdentifier() {
+            return delegate.getIdentifier();
+        }
+
+        @Override
         public DisplayName asDescribable() {
             return delegate.asDescribable();
         }
@@ -96,6 +101,11 @@ public class RealisedVariantBackedConfigurationMetadata extends AbstractVariantB
         @Override
         public CapabilitiesMetadata getCapabilities() {
             return delegate.getCapabilities();
+        }
+
+        @Override
+        public boolean isExternalVariant() {
+            return delegate.isExternalVariant();
         }
 
         private ImmutableAttributes mergeComponentAndVariantAttributes(AttributeContainerInternal variantAttributes) {

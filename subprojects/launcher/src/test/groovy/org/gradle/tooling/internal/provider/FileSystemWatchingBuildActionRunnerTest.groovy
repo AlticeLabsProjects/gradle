@@ -18,52 +18,72 @@ package org.gradle.tooling.internal.provider
 
 import org.gradle.api.internal.GradleInternal
 import org.gradle.api.internal.StartParameterInternal
+import org.gradle.api.internal.changedetection.state.FileHasherStatistics
+import org.gradle.internal.file.StatStatistics
 import org.gradle.internal.invocation.BuildAction
 import org.gradle.internal.invocation.BuildActionRunner
 import org.gradle.internal.invocation.BuildController
+import org.gradle.internal.operations.BuildOperationRunner
 import org.gradle.internal.service.ServiceRegistry
-import org.gradle.internal.vfs.VirtualFileSystem
-import org.gradle.internal.watch.vfs.FileSystemWatchingHandler
+import org.gradle.internal.snapshot.impl.DirectorySnapshotterStatistics
+import org.gradle.internal.watch.vfs.BuildLifecycleAwareVirtualFileSystem
+import org.gradle.internal.watch.vfs.BuildLifecycleAwareVirtualFileSystem.VfsLogging
+import org.gradle.internal.watch.vfs.BuildLifecycleAwareVirtualFileSystem.WatchLogging
 import spock.lang.Specification
 import spock.lang.Unroll
 
 @Unroll
 class FileSystemWatchingBuildActionRunnerTest extends Specification {
 
-    def watchingHandler = Mock(FileSystemWatchingHandler)
-    def virtualFileSystem = Mock(VirtualFileSystem)
-    def startParameter = Mock(StartParameterInternal)
+    def watchingHandler = Mock(BuildLifecycleAwareVirtualFileSystem)
+    def startParameter = Stub(StartParameterInternal)
+    def buildOperationRunner = Mock(BuildOperationRunner)
     def buildController = Stub(BuildController) {
         getGradle() >> Stub(GradleInternal) {
             getStartParameter() >> startParameter
             getServices() >> Stub(ServiceRegistry) {
-                get(FileSystemWatchingHandler) >> watchingHandler
-                get(VirtualFileSystem) >> virtualFileSystem
+                get(BuildLifecycleAwareVirtualFileSystem) >> watchingHandler
+                get(BuildOperationRunner) >> buildOperationRunner
+                get(FileHasherStatistics.Collector) >> Stub(FileHasherStatistics.Collector)
+                get(StatStatistics.Collector) >> Stub(StatStatistics.Collector)
+                get(DirectorySnapshotterStatistics.Collector) >> Stub(DirectorySnapshotterStatistics.Collector)
             }
         }
     }
     def delegate = Mock(BuildActionRunner)
     def buildAction = Mock(BuildAction)
 
-    def "watching virtual file system is informed about watching the file system being #watchFsEnabledString"() {
+    def "watching virtual file system is informed about watching the file system being #watchFsEnabledString (VFS logging: #vfsLogging, watch logging: #watchLogging)"() {
         _ * startParameter.getSystemPropertiesArgs() >> [:]
         _ * startParameter.isWatchFileSystem() >> watchFsEnabled
+        _ * startParameter.isWatchFileSystemDebugLogging() >> (watchLogging == WatchLogging.DEBUG)
+        _ * startParameter.isVfsVerboseLogging() >> (vfsLogging == VfsLogging.VERBOSE)
+        _ * startParameter.isVfsDebugLogging() >> false
 
         def runner = new FileSystemWatchingBuildActionRunner(delegate)
 
         when:
         runner.run(buildAction, buildController)
         then:
-        1 * watchingHandler.afterBuildStarted(watchFsEnabled)
+        1 * watchingHandler.afterBuildStarted(watchFsEnabled, vfsLogging, watchLogging, buildOperationRunner)
 
         then:
         1 * delegate.run(buildAction, buildController)
 
         then:
-        1 * watchingHandler.beforeBuildFinished(watchFsEnabled)
+        1 * watchingHandler.beforeBuildFinished(watchFsEnabled, vfsLogging, watchLogging, buildOperationRunner, _)
+
+        then:
+        0 * _
 
         where:
-        watchFsEnabled << [true, false]
+        watchFsEnabled | vfsLogging         | watchLogging
+        true           | VfsLogging.VERBOSE | WatchLogging.NORMAL
+        true           | VfsLogging.NORMAL  | WatchLogging.NORMAL
+        true           | VfsLogging.VERBOSE | WatchLogging.DEBUG
+        true           | VfsLogging.NORMAL  | WatchLogging.DEBUG
+        false          | VfsLogging.NORMAL  | WatchLogging.NORMAL
+        false          | VfsLogging.NORMAL  | WatchLogging.DEBUG
         watchFsEnabledString = watchFsEnabled ? "enabled" : "disabled"
     }
 }

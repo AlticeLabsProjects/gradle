@@ -17,7 +17,7 @@
 package org.gradle.integtests.resolve.verification
 
 import org.gradle.api.internal.artifacts.ivyservice.CacheLayout
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.integtests.fixtures.cache.CachingIntegrationFixture
 import org.gradle.test.fixtures.file.TestFile
 import spock.lang.Issue
@@ -82,7 +82,7 @@ class DependencyVerificationIntegrityCheckIntegTest extends AbstractDependencyVe
     }
 
     @Unroll
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     def "fails verifying the file but not resolution itself if verification metadata fails for #kind"() {
         createMetadataFile {
             addChecksum("org:foo:1.0", kind, "invalid")
@@ -320,7 +320,7 @@ This can indicate that a dependency has been compromised. Please carefully verif
     }
 
     @Unroll
-    @ToBeFixedForInstantExecution(
+    @ToBeFixedForConfigurationCache(
         because = "broken file collection"
     )
     def "fails on the first access to an artifact (not at the end of the build) using #firstResolution"() {
@@ -617,7 +617,6 @@ If the artifacts are trustworthy, you will need to update the gradle/verificatio
     }
 
     @Unroll
-    @ToBeFixedForInstantExecution
     def "dependency verification also checks included build dependencies (terse output=#terse)"() {
         createMetadataFile {
             addChecksum("org:foo", "sha1", "16e066e005a935ac60f06216115436ab97c5da02")
@@ -669,7 +668,7 @@ If the artifacts are trustworthy, you will need to update the gradle/verificatio
 
     @Unroll
     @Issue("https://github.com/gradle/gradle/issues/4934")
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     def "can detect a tampered file in the local cache (terse output=#terse)"() {
         createMetadataFile {
             addChecksum("org:foo", "sha1", "16e066e005a935ac60f06216115436ab97c5da02")
@@ -726,7 +725,7 @@ This can indicate that a dependency has been compromised. Please carefully verif
      * it means they have access to the local FS so all bets are off.
      */
     @Issue("https://github.com/gradle/gradle/issues/4934")
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     @Unroll
     def "can detect a tampered metadata file in the local cache (stop in between = #stop)"() {
         createMetadataFile {
@@ -768,51 +767,6 @@ This can indicate that a dependency has been compromised. Please carefully verif
   - On artifact foo-1.0.pom (org:foo:1.0) in repository 'maven': expected a 'sha1' checksum of '85a7b8a2eb6bb1c4cdbbfe5e6c8dc3757de22c02' but was '93d6c93d9a76d27ec3462e7b57de5df1eb45bc7b'
 
 This can indicate that a dependency has been compromised. Please carefully verify the checksums."""
-
-        where:
-        stop << [true, false]
-    }
-
-    @ToBeFixedForInstantExecution
-    @Unroll
-    def "deleting local artifacts fails verification (stop in between = #stop)"() {
-        createMetadataFile {
-            addChecksum("org:foo", "sha1", "16e066e005a935ac60f06216115436ab97c5da02")
-            addChecksum("org:foo", "sha1", "85a7b8a2eb6bb1c4cdbbfe5e6c8dc3757de22c02", "pom", "pom")
-        }
-        uncheckedModule("org", "foo")
-
-        given:
-        terseConsoleOutput(false)
-        javaLibrary()
-        buildFile << """
-            dependencies {
-                implementation "org:foo:1.0"
-            }
-        """
-
-        when:
-        succeeds ':compileJava'
-
-        then:
-        noExceptionThrown()
-        if (stop) {
-            executer.stop()
-        }
-
-        when:
-        def group = new File(CacheLayout.FILE_STORE.getPath(metadataCacheDir), "org")
-        def module = new File(group, "foo")
-        def version = new File(module, "1.0")
-        def originHash = new File(version, "85a7b8a2eb6bb1c4cdbbfe5e6c8dc3757de22c02")
-        def artifactFile = new File(originHash, "foo-1.0.pom")
-        artifactFile.delete()
-
-        fails ':compileJava'
-
-        then:
-        failure.assertHasCause """Dependency verification failed for configuration ':compileClasspath':
-  - On artifact foo-1.0.pom (org:foo:1.0) in repository 'maven': artifact file has been deleted from local cache so verification cannot be performed"""
 
         where:
         stop << [true, false]
@@ -929,7 +883,7 @@ This can indicate that a dependency has been compromised. Please carefully verif
         "sha512" | "734fce768f0e1a3aec423cb4804e5cdf343fd317418a5da1adc825256805c5cad9026a3e927ae43ecc12d378ce8f45cc3e16ade9114c9a147fda3958d357a85b" | "3d890ff72a2d6fcb2a921715143e6489d8f650a572c33070b7f290082a07bfc4af0b64763bcf505e1c07388bc21b7d5707e50a3952188dc604814e09387fbbfe"
     }
 
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     def "reasonable error message when the verification file can't be parsed"() {
         given:
         javaLibrary()
@@ -999,7 +953,7 @@ This can indicate that a dependency has been compromised. Please carefully verif
     }
 
     @Unroll
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     def "can disable verification of a detached configuration (terse output=#terse)"() {
         createMetadataFile {
             addChecksum("org:foo:1.0", 'sha1', "invalid")
@@ -1045,4 +999,60 @@ This can indicate that a dependency has been compromised. Please carefully verif
         where:
         terse << [true, false]
     }
+
+    @ToBeFixedForConfigurationCache
+    def "handles artifacts cleaned by the cache cleanup"() {
+
+        createMetadataFile {
+            addChecksum("org:foo", "sha1", "16e066e005a935ac60f06216115436ab97c5da02")
+            addChecksum("org:foo", "sha1", "85a7b8a2eb6bb1c4cdbbfe5e6c8dc3757de22c02", "pom", "pom")
+        }
+        def mod = mavenHttpRepo.module('org', 'foo', '1.0')
+            .publish()
+
+        given:
+        terseConsoleOutput(false)
+        javaLibrary()
+        buildFile << """
+            dependencies {
+                implementation "org:foo:1.0"
+            }
+        """
+
+        when:
+        mod.pom.expectGet()
+        mod.artifact.expectGet()
+
+        then:
+        succeeds ':compileJava'
+
+        when:
+        markForArtifactCacheCleanup()
+
+        then:
+        succeeds ':help'
+
+        when:
+        mod.pom.expectGet()
+        mod.artifact.expectGet()
+
+        then:
+        succeeds ':compileJava'
+
+        when:
+        markForArtifactCacheCleanup()
+        mod.publishWithChangedContent()
+        succeeds ':help'
+
+        then:
+        mod.pom.expectGet()
+        mod.artifact.expectGet()
+        fails ':compileJava'
+
+        failure.assertHasCause """Dependency verification failed for configuration ':compileClasspath':
+  - On artifact foo-1.0.jar (org:foo:1.0) in repository 'maven': expected a 'sha1' checksum of '16e066e005a935ac60f06216115436ab97c5da02' but was '062082db6574cbe2c0b473616611582ad9f14035'
+  - On artifact foo-1.0.pom (org:foo:1.0) in repository 'maven': expected a 'sha1' checksum of '85a7b8a2eb6bb1c4cdbbfe5e6c8dc3757de22c02' but was 'ebf499f1591331d7cb0acfd6726ee3a172f5f82c'
+"""
+    }
+
 }

@@ -22,7 +22,7 @@ import org.gradle.caching.internal.origin.OriginMetadata
 import org.gradle.internal.Try
 import org.gradle.internal.execution.BeforeExecutionContext
 import org.gradle.internal.execution.CurrentSnapshotResult
-import org.gradle.internal.execution.ExecutionOutcome
+import org.gradle.internal.execution.Result
 import org.gradle.internal.execution.history.AfterPreviousExecutionState
 import org.gradle.internal.execution.history.BeforeExecutionState
 import org.gradle.internal.execution.history.ExecutionHistoryStore
@@ -57,21 +57,21 @@ class StoreExecutionStateStepTest extends StepSpec<BeforeExecutionContext> imple
     }
 
     def setup() {
-        _ * work.executionHistoryStore >> Optional.of(executionHistoryStore)
+        _ * work.history >> Optional.of(executionHistoryStore)
     }
 
     def "output snapshots are stored after successful execution"() {
         when:
-        def result = step.execute(context)
+        def result = step.execute(work, context)
 
         then:
         result == delegateResult
-        1 * delegate.execute(context) >> delegateResult
+        1 * delegate.execute(work, context) >> delegateResult
 
         then:
         1 * delegateResult.finalOutputs >> finalOutputs
         _ * context.beforeExecutionState >> Optional.of(beforeExecutionState)
-        1 * delegateResult.outcome >> Try.successful(ExecutionOutcome.EXECUTED_NON_INCREMENTALLY)
+        1 * delegateResult.executionResult >> Try.successful(Mock(Result.ExecutionResult))
 
         then:
         interaction { expectStore(true, finalOutputs) }
@@ -80,16 +80,16 @@ class StoreExecutionStateStepTest extends StepSpec<BeforeExecutionContext> imple
 
     def "output snapshots are stored after failed execution when there's no previous state available"() {
         when:
-        def result = step.execute(context)
+        def result = step.execute(work, context)
 
         then:
         result == delegateResult
-        1 * delegate.execute(context) >> delegateResult
+        1 * delegate.execute(work, context) >> delegateResult
 
         then:
         1 * delegateResult.finalOutputs >> finalOutputs
         _ * context.beforeExecutionState >> Optional.of(beforeExecutionState)
-        1 * delegateResult.outcome >> Try.failure(new RuntimeException("execution error"))
+        1 * delegateResult.executionResult >> Try.failure(new RuntimeException("execution error"))
 
         then:
         _ * context.afterPreviousExecutionState >> Optional.empty()
@@ -103,16 +103,16 @@ class StoreExecutionStateStepTest extends StepSpec<BeforeExecutionContext> imple
         def afterPreviousExecutionState = Mock(AfterPreviousExecutionState)
 
         when:
-        def result = step.execute(context)
+        def result = step.execute(work, context)
 
         then:
         result == delegateResult
-        1 * delegate.execute(context) >> delegateResult
+        1 * delegate.execute(work, context) >> delegateResult
 
         then:
         1 * delegateResult.finalOutputs >> finalOutputs
         _ * context.beforeExecutionState >> Optional.of(beforeExecutionState)
-        1 * delegateResult.outcome >> Try.failure(new RuntimeException("execution error"))
+        1 * delegateResult.executionResult >> Try.failure(new RuntimeException("execution error"))
 
         then:
         _ * context.afterPreviousExecutionState >> Optional.of(afterPreviousExecutionState)
@@ -127,16 +127,16 @@ class StoreExecutionStateStepTest extends StepSpec<BeforeExecutionContext> imple
         def afterPreviousExecutionState = Mock(AfterPreviousExecutionState)
 
         when:
-        def result = step.execute(context)
+        def result = step.execute(work, context)
 
         then:
         result == delegateResult
-        1 * delegate.execute(context) >> delegateResult
+        1 * delegate.execute(work, context) >> delegateResult
 
         then:
         1 * delegateResult.finalOutputs >> finalOutputs
         _ * context.beforeExecutionState >> Optional.of(beforeExecutionState)
-        1 * delegateResult.outcome >> Try.failure(new RuntimeException("execution error"))
+        1 * delegateResult.executionResult >> Try.failure(new RuntimeException("execution error"))
 
         then:
         _ * context.afterPreviousExecutionState >> Optional.of(afterPreviousExecutionState)
@@ -147,7 +147,7 @@ class StoreExecutionStateStepTest extends StepSpec<BeforeExecutionContext> imple
     void expectStore(boolean successful, ImmutableSortedMap<String, CurrentFileCollectionFingerprint> finalOutputs) {
         1 * delegateResult.originMetadata >> originMetadata
         1 * executionHistoryStore.store(
-            identity,
+            identity.uniqueId,
             originMetadata,
             implementationSnapshot,
             additionalImplementations,

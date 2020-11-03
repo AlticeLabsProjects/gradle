@@ -16,54 +16,22 @@
 
 package org.gradle.internal.snapshot;
 
-import javax.annotation.Nullable;
 import java.util.Optional;
 
 /**
  * Any snapshot in the tree of the virtual file system.
  */
-public interface FileSystemNode {
-
-    /**
-     * Gets a snapshot from the current node with relative path filePath.substring(offset).
-     *
-     * When calling this method, the caller needs to make sure the the snapshot is a child of this node.
-     * Must not include the {@link #getPathToParent()}..
-     */
-    Optional<MetadataSnapshot> getSnapshot(VfsRelativePath relativePath, CaseSensitivity caseSensitivity);
-
-    /**
-     * The snapshot information at this node.
-     *
-     * {@link Optional#empty()} if no information is available.
-     */
-    Optional<MetadataSnapshot> getSnapshot();
+public interface FileSystemNode extends ReadOnlyFileSystemNode {
 
     /**
      * Stores information to the virtual file system that we have learned about.
      *
      * Complete information, like {@link CompleteFileSystemLocationSnapshot}s, are not touched nor replaced.
      */
-    FileSystemNode store(VfsRelativePath relativePath, CaseSensitivity caseSensitivity, MetadataSnapshot snapshot, SnapshotHierarchy.NodeDiffListener diffListener);
+    FileSystemNode store(VfsRelativePath targetPath, CaseSensitivity caseSensitivity, MetadataSnapshot snapshot, SnapshotHierarchy.NodeDiffListener diffListener);
 
     /**
      * Invalidates part of the node.
      */
-    Optional<FileSystemNode> invalidate(VfsRelativePath relativePath, CaseSensitivity caseSensitivity, SnapshotHierarchy.NodeDiffListener diffListener);
-
-    /**
-     * The path to the parent snapshot or the root of the file system.
-     */
-    String getPathToParent();
-
-    /**
-     * Creates a new node with the same children, but a different path to the parent.
-     */
-    FileSystemNode withPathToParent(String newPathToParent);
-
-    void accept(SnapshotHierarchy.SnapshotVisitor snapshotVisitor);
-
-    interface NodeVisitor {
-        void visitNode(FileSystemNode node, @Nullable FileSystemNode parent);
-    }
+    Optional<FileSystemNode> invalidate(VfsRelativePath targetPath, CaseSensitivity caseSensitivity, SnapshotHierarchy.NodeDiffListener diffListener);
 }

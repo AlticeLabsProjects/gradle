@@ -16,16 +16,13 @@
 
 package org.gradle.api.internal.artifacts.transform;
 
+import com.google.common.collect.ImmutableList;
 import org.gradle.api.Action;
 import org.gradle.api.artifacts.component.ComponentIdentifier;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ResolvableArtifact;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ResolvedArtifactSet;
 import org.gradle.api.internal.attributes.ImmutableAttributes;
 import org.gradle.api.internal.tasks.TaskDependencyResolveContext;
-
-import java.io.File;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * An artifact set containing transformed external artifacts.
@@ -39,10 +36,18 @@ public class TransformedExternalArtifactSet extends AbstractTransformedArtifactS
         ResolvedArtifactSet delegate,
         ImmutableAttributes target,
         Transformation transformation,
-        ExtraExecutionGraphDependenciesResolverFactory dependenciesResolverFactory,
-        TransformationNodeRegistry transformationNodeRegistry
+        ExtraExecutionGraphDependenciesResolverFactory dependenciesResolverFactory
     ) {
-        super(componentIdentifier, delegate, target, transformation, dependenciesResolverFactory, transformationNodeRegistry);
+        super(componentIdentifier, delegate, target, transformation, dependenciesResolverFactory);
+        this.componentIdentifier = componentIdentifier;
+        this.delegate = delegate;
+    }
+
+    public TransformedExternalArtifactSet(ComponentIdentifier componentIdentifier,
+                                          ResolvedArtifactSet delegate,
+                                          ImmutableAttributes targetVariantAttributes,
+                                          ImmutableList<BoundTransformationStep> steps) {
+        super(delegate, targetVariantAttributes, steps);
         this.componentIdentifier = componentIdentifier;
         this.delegate = delegate;
     }
@@ -53,16 +58,9 @@ public class TransformedExternalArtifactSet extends AbstractTransformedArtifactS
 
     @Override
     public void visitDependencies(TaskDependencyResolveContext context) {
-    }
-
-    public List<File> calculateResult() {
-        List<File> files = new ArrayList<>();
-        delegate.visitExternalArtifacts(artifact -> {
-            TransformationSubject subject = TransformationSubject.initial(artifact.getId(), artifact.getFile());
-            TransformationSubject transformed = getTransformation().createInvocation(subject, getDependenciesResolver(), null).invoke().get();
-            files.addAll(transformed.getFiles());
-        });
-        return files;
+        for (BoundTransformationStep step : getSteps()) {
+            context.add(step.getUpstreamDependencies());
+        }
     }
 
     public void visitArtifacts(Action<ResolvableArtifact> visitor) {

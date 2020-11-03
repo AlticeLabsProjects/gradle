@@ -16,7 +16,6 @@
 
 package org.gradle.integtests.composite
 
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
 import org.gradle.integtests.fixtures.build.BuildTestFile
 import org.gradle.test.fixtures.server.http.BlockingHttpServer
 import org.junit.Rule
@@ -36,7 +35,6 @@ class CompositeBuildTaskFailureIntegrationTest extends AbstractCompositeBuildInt
         includedBuilds << buildB
     }
 
-    @ToBeFixedForInstantExecution
     def "does not run task when dependency in another build fails"() {
         given:
         dependency("org.test:buildB:1.0")
@@ -68,7 +66,6 @@ class CompositeBuildTaskFailureIntegrationTest extends AbstractCompositeBuildInt
     }
 
     @Issue("https://github.com/gradle/gradle/issues/5714")
-    @ToBeFixedForInstantExecution
     def "build fails when finalizer task in included build that is not a dependency of any other task fails"() {
         given:
         dependency("org.test:buildB:1.0")
@@ -88,7 +85,6 @@ class CompositeBuildTaskFailureIntegrationTest extends AbstractCompositeBuildInt
         failure.assertHasDescription("Execution failed for task ':buildB:broken'.")
     }
 
-    @ToBeFixedForInstantExecution(because = "composite builds")
     def "does not compile build script when build script classpath cannot be built"() {
         given:
         buildB.file("src/main/java/B.java") << """
@@ -113,16 +109,15 @@ class CompositeBuildTaskFailureIntegrationTest extends AbstractCompositeBuildInt
     @Rule
     BlockingHttpServer server = new BlockingHttpServer()
 
-    @ToBeFixedForInstantExecution
     def "build fails when tasks in multiple builds fails"() {
         given:
         server.start()
 
         buildA.buildFile << """
             task broken {
-                doLast { 
+                doLast {
                     ${server.callFromBuild('buildA')}
-                    throw new RuntimeException("broken") 
+                    throw new RuntimeException("broken")
                 }
             }
             processResources.dependsOn(broken)
@@ -130,9 +125,9 @@ class CompositeBuildTaskFailureIntegrationTest extends AbstractCompositeBuildInt
         dependency("org.test:buildB:1.0")
         buildB.buildFile << """
             task broken {
-                doLast { 
+                doLast {
                     ${server.callFromBuild('buildB')}
-                    throw new RuntimeException("broken") 
+                    throw new RuntimeException("broken")
                 }
             }
             processResources.dependsOn(broken)

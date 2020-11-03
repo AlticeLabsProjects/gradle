@@ -29,6 +29,8 @@ import org.gradle.api.internal.tasks.properties.FileParameterUtils;
 import org.gradle.api.internal.tasks.properties.GetInputFilesVisitor;
 import org.gradle.api.internal.tasks.properties.GetInputPropertiesVisitor;
 import org.gradle.api.internal.tasks.properties.InputFilePropertyType;
+import org.gradle.api.internal.tasks.properties.InputParameterUtils;
+import org.gradle.api.internal.tasks.properties.InputPropertySpec;
 import org.gradle.api.internal.tasks.properties.PropertyValue;
 import org.gradle.api.internal.tasks.properties.PropertyVisitor;
 import org.gradle.api.internal.tasks.properties.PropertyWalker;
@@ -38,6 +40,7 @@ import org.gradle.api.tasks.TaskInputs;
 
 import javax.annotation.Nullable;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -155,9 +158,13 @@ public class DefaultTaskInputs implements TaskInputsInternal {
 
     @Override
     public Map<String, Object> getProperties() {
-        GetInputPropertiesVisitor visitor = new GetInputPropertiesVisitor(task.getName());
+        GetInputPropertiesVisitor visitor = new GetInputPropertiesVisitor();
         TaskPropertyUtils.visitProperties(propertyWalker, task, visitor);
-        return Collections.unmodifiableMap(visitor.getPropertyValuesSupplier().get());
+        Map<String, Object> result = new HashMap<>();
+        for (InputPropertySpec inputProperty : visitor.getProperties()) {
+            result.put(inputProperty.getPropertyName(), InputParameterUtils.prepareInputParameterValue(inputProperty, task));
+        }
+        return Collections.unmodifiableMap(result);
     }
 
     @Override

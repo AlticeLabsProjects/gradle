@@ -16,7 +16,6 @@
 package org.gradle.api.plugins.quality
 
 import org.gradle.api.plugins.quality.pmd.AbstractPmdPluginVersionIntegrationTest
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
 import org.gradle.util.Matchers
 import org.hamcrest.CoreMatchers
 import org.junit.Assume
@@ -45,7 +44,6 @@ class PmdPluginIncrementalAnalysisIntegrationTest extends AbstractPmdPluginVersi
         """.stripIndent()
     }
 
-    @ToBeFixedForInstantExecution
     def "incremental analysis cache file is not generated with incremental analysis disabled"() {
         buildFile << 'pmd { incrementalAnalysis = false }'
         goodCode()
@@ -55,7 +53,6 @@ class PmdPluginIncrementalAnalysisIntegrationTest extends AbstractPmdPluginVersi
         !file("build/tmp/pmdMain/incremental.cache").exists()
     }
 
-    @ToBeFixedForInstantExecution
     def "incremental analysis can be enabled"() {
         given:
         Assume.assumeTrue(supportIncrementalAnalysis())
@@ -75,7 +72,6 @@ class PmdPluginIncrementalAnalysisIntegrationTest extends AbstractPmdPluginVersi
         !output.contains('Analysis cache invalidated, rulesets changed')
     }
 
-    @ToBeFixedForInstantExecution
     def 'incremental analysis is transparent'() {
         given:
         Assume.assumeTrue(supportIncrementalAnalysis())
@@ -97,7 +93,6 @@ class PmdPluginIncrementalAnalysisIntegrationTest extends AbstractPmdPluginVersi
     }
 
     @Unroll
-    @ToBeFixedForInstantExecution
     def 'incremental analysis invalidated when #reason'() {
         given:
         Assume.assumeTrue(supportIncrementalAnalysis())
@@ -121,7 +116,6 @@ class PmdPluginIncrementalAnalysisIntegrationTest extends AbstractPmdPluginVersi
         'rulesets changed'    | 'ruleSetFiles = files("customRuleSet.xml")'
     }
 
-    @ToBeFixedForInstantExecution
     def "incremental analysis is available in 6.0.0 or newer"() {
         given:
         Assume.assumeTrue(supportIncrementalAnalysis())
@@ -131,7 +125,6 @@ class PmdPluginIncrementalAnalysisIntegrationTest extends AbstractPmdPluginVersi
         succeeds('pmdMain')
     }
 
-    @ToBeFixedForInstantExecution
     def "incremental analysis fails when enabled with older than 6.0.0"() {
         given:
         Assume.assumeFalse(supportIncrementalAnalysis())

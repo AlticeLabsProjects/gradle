@@ -16,7 +16,8 @@
 
 package gradlebuild.performance.generator.tasks
 
-
+import gradlebuild.performance.generator.RepositoryBuilder
+import gradlebuild.performance.generator.TestProject
 import groovy.text.SimpleTemplateEngine
 import groovy.text.Template
 import org.gradle.api.GradleException
@@ -29,8 +30,6 @@ import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
-import gradlebuild.performance.generator.RepositoryBuilder
-import gradlebuild.performance.generator.TestProject
 
 /**
  * Original tangled mess of a project generator.
@@ -53,6 +52,12 @@ abstract class AbstractProjectGeneratorTask extends TemplateProjectGeneratorTask
 
     @Input
     int numberOfScriptPlugins = 0
+
+    @Input
+    String daemonMemory
+
+    @Input
+    int maxWorkers = 8
 
     @Nested
     final gradlebuild.performance.generator.DependencyGraph dependencyGraph = new gradlebuild.performance.generator.DependencyGraph()
@@ -200,6 +205,9 @@ abstract class AbstractProjectGeneratorTask extends TemplateProjectGeneratorTask
             projectDir: destDir,
             files: rootProjectFiles,
             templates: effectiveRootProjectTemplates,
+            daemonMemory: daemonMemory,
+            parallel: true,
+            maxWorkers: maxWorkers,
             includeSource: subprojectNames.empty)
 
         project.copy {
@@ -221,7 +229,7 @@ abstract class AbstractProjectGeneratorTask extends TemplateProjectGeneratorTask
 
     @Input
     List<String> getRootProjectFiles() {
-        subprojectNames.empty ? ['settings.gradle'] : ['settings.gradle', 'gradle.properties', 'checkstyle.xml']
+        subprojectNames.empty ? ['settings.gradle', 'gradle.properties'] : ['settings.gradle', 'gradle.properties', 'checkstyle.xml']
     }
 
     def generateSubProject(TestProject testProject) {
@@ -302,7 +310,7 @@ abstract class AbstractProjectGeneratorTask extends TemplateProjectGeneratorTask
         destFile.parentFile.mkdirs()
         destFile.withWriter { Writer writer ->
             if (templateName.endsWith('.gradle')) {
-                writer << "// Generated ${UUID.randomUUID()}\n"
+                writer << "// Generated for subproject ${templateArgs.projectName}\n"
             }
             getTemplate(templateFiles.last()).make(templateArgs).writeTo(writer)
         }

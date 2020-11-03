@@ -158,6 +158,7 @@ public class DefaultJvmVariantBuilder implements JvmVariantBuilderInternal {
         String apiElementsConfigurationName;
         String runtimeElementsConfigurationName;
         String compileOnlyConfigurationName;
+        String compileOnlyApiConfigurationName;
         String runtimeOnlyConfigurationName;
         if (mainSourceSet) {
             apiConfigurationName = name + "Api";
@@ -165,6 +166,7 @@ public class DefaultJvmVariantBuilder implements JvmVariantBuilderInternal {
             apiElementsConfigurationName = apiConfigurationName + "Elements";
             runtimeElementsConfigurationName = name + "RuntimeElements";
             compileOnlyConfigurationName = name + "CompileOnly";
+            compileOnlyApiConfigurationName = name + "CompileOnlyApi";
             runtimeOnlyConfigurationName = name + "RuntimeOnly";
         } else {
             apiConfigurationName = sourceSet.getApiConfigurationName();
@@ -172,6 +174,7 @@ public class DefaultJvmVariantBuilder implements JvmVariantBuilderInternal {
             apiElementsConfigurationName = sourceSet.getApiElementsConfigurationName();
             runtimeElementsConfigurationName = sourceSet.getRuntimeElementsConfigurationName();
             compileOnlyConfigurationName = sourceSet.getCompileOnlyConfigurationName();
+            compileOnlyApiConfigurationName = sourceSet.getCompileOnlyApiConfigurationName();
             runtimeOnlyConfigurationName = sourceSet.getRuntimeOnlyConfigurationName();
         }
 
@@ -182,6 +185,7 @@ public class DefaultJvmVariantBuilder implements JvmVariantBuilderInternal {
         // to create them
         Configuration implementation = bucket("Implementation", implementationConfigurationName, displayName);
         Configuration compileOnly = bucket("Compile-Only", compileOnlyConfigurationName, displayName);
+        Configuration compileOnlyApi = bucket("Compile-Only API", compileOnlyApiConfigurationName, displayName);
         Configuration runtimeOnly = bucket("Runtime-Only", runtimeOnlyConfigurationName, displayName);
 
         TaskProvider<Task> jarTask = registerOrGetJarTask(sourceSet, displayName);
@@ -190,7 +194,7 @@ public class DefaultJvmVariantBuilder implements JvmVariantBuilderInternal {
             builder.fromSourceSet(sourceSet)
                 .providesApi()
                 .withDescription("API elements for " + displayName)
-                .extendsFrom(api)
+                .extendsFrom(api, compileOnlyApi)
                 .withCapabilities(capabilities)
                 .withClassDirectoryVariant()
                 .artifact(jarTask);
@@ -237,6 +241,7 @@ public class DefaultJvmVariantBuilder implements JvmVariantBuilderInternal {
     private Configuration bucket(String kind, String configName, String displayName) {
         Configuration configuration = configurations.maybeCreate(configName);
         configuration.setDescription(kind + " dependencies for " + displayName);
+        configuration.setVisible(false);
         configuration.setCanBeResolved(false);
         configuration.setCanBeConsumed(false);
         return configuration;

@@ -33,7 +33,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.HashSet;
 import java.util.Set;
 
-@ServiceScope(Scopes.UserHome)
+@ServiceScope(Scopes.UserHome.class)
 public class ClasspathBuilder {
     private static final int BUFFER_SIZE = 8192;
 
@@ -83,6 +83,7 @@ public class ClasspathBuilder {
         public void put(String name, byte[] content) throws IOException {
             maybeAddParent(name);
             ZipEntry zipEntry = newZipEntryWithFixedTime(name);
+            outputStream.setEncoding("UTF-8");
             outputStream.putNextEntry(zipEntry);
             outputStream.write(content);
             outputStream.closeEntry();

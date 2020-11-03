@@ -19,12 +19,11 @@ package org.gradle.internal.watch
 import com.google.common.collect.ImmutableSet
 import org.apache.commons.io.FileUtils
 import org.gradle.cache.GlobalCacheLocations
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.internal.os.OperatingSystem
+import org.gradle.internal.service.scopes.VirtualFileSystemServices
 import org.gradle.test.fixtures.server.http.MavenHttpRepository
 import org.gradle.test.fixtures.server.http.RepositoryHttpServer
-import org.gradle.util.Requires
-import org.gradle.util.TestPrecondition
 import org.gradle.util.TextUtil
 import org.junit.Rule
 import spock.lang.Issue
@@ -35,11 +34,15 @@ class WatchedDirectoriesFileSystemWatchingIntegrationTest extends AbstractFileSy
     @Rule
     public final RepositoryHttpServer server = new RepositoryHttpServer(temporaryFolder)
 
+    def setup() {
+        executer.requireDaemon()
+    }
+
     def "watches the project directory"() {
         buildFile << """
             apply plugin: "application"
 
-            application.mainClassName = "Main"
+            application.mainClass = "Main"
         """
 
         def mainSourceFileRelativePath = "src/main/java/Main.java"
@@ -49,7 +52,7 @@ class WatchedDirectoriesFileSystemWatchingIntegrationTest extends AbstractFileSy
         when:
         withWatchFs().run "run", "--info"
         then:
-        assertWatchedRootDirectories([ImmutableSet.of(testDirectory)])
+        assertWatchableHierarchies([ImmutableSet.of(testDirectory)])
     }
 
     def "watches the project directory when buildSrc is present"() {
@@ -64,11 +67,9 @@ class WatchedDirectoriesFileSystemWatchingIntegrationTest extends AbstractFileSy
         withWatchFs().run "hello", "--info"
         then:
         outputContains "Hello from original task!"
-        assertWatchedRootDirectories([ImmutableSet.of(testDirectory)] * 2)
+        assertWatchableHierarchies([ImmutableSet.of(testDirectory)] * 2)
     }
 
-    @ToBeFixedForInstantExecution(because = "composite build not yet supported")
-    @Requires(TestPrecondition.NOT_WINDOWS) // https://github.com/gradle/gradle-private/issues/3116
     def "works with composite build"() {
         buildTestFixture.withBuildInSubDir()
         def includedBuild = singleProjectBuild("includedBuild") {
@@ -91,7 +92,7 @@ class WatchedDirectoriesFileSystemWatchingIntegrationTest extends AbstractFileSy
         executer.beforeExecute {
             inDirectory(consumer)
         }
-        def expectedBuildRootDirectories = [
+        def expectedWatchableHierarchies = [
             ImmutableSet.of(consumer),
             ImmutableSet.of(consumer, includedBuild)
         ]
@@ -100,13 +101,13 @@ class WatchedDirectoriesFileSystemWatchingIntegrationTest extends AbstractFileSy
         withWatchFs().run "assemble", "--info"
         then:
         executedAndNotSkipped(":includedBuild:jar")
-        assertWatchedRootDirectories(expectedBuildRootDirectories)
+        assertWatchableHierarchies(expectedWatchableHierarchies)
 
         when:
         withWatchFs().run("assemble", "--info")
         then:
         skipped(":includedBuild:jar")
-        assertWatchedRootDirectories(expectedBuildRootDirectories)
+        assertWatchableHierarchies([ImmutableSet.of(consumer, includedBuild)] * 2)
 
         when:
         includedBuild.file("src/main/java/NewClass.java")  << "public class NewClass {}"
@@ -115,8 +116,7 @@ class WatchedDirectoriesFileSystemWatchingIntegrationTest extends AbstractFileSy
         executedAndNotSkipped(":includedBuild:jar")
     }
 
-    @Requires(TestPrecondition.NOT_WINDOWS) // https://github.com/gradle/gradle-private/issues/3116
-    @ToBeFixedForInstantExecution(because = "GradleBuild task is not yet supported")
+    @ToBeFixedForConfigurationCache(because = "GradleBuild task is not yet supported")
     def "works with GradleBuild task"() {
         buildTestFixture.withBuildInSubDir()
         def buildInBuild = singleProjectBuild("buildInBuild") {
@@ -136,7 +136,7 @@ class WatchedDirectoriesFileSystemWatchingIntegrationTest extends AbstractFileSy
         executer.beforeExecute {
             inDirectory(consumer)
         }
-        def expectedBuildRootDirectories = [
+        def expectedWatchableHierarchies = [
             ImmutableSet.of(consumer),
             ImmutableSet.of(consumer, buildInBuild)
         ]
@@ -144,15 +144,15 @@ class WatchedDirectoriesFileSystemWatchingIntegrationTest extends AbstractFileSy
         when:
         withWatchFs().run "buildInBuild", "--info"
         then:
-        assertWatchedRootDirectories(expectedBuildRootDirectories)
+        assertWatchableHierarchies(expectedWatchableHierarchies)
 
         when:
         withWatchFs().run "buildInBuild", "--info"
         then:
-        assertWatchedRootDirectories(expectedBuildRootDirectories)
+        assertWatchableHierarchies(expectedWatchableHierarchies)
     }
 
-    def "gracefully handle the root project not being available"() {
+    def "gracefully handle the root project directory not being available"() {
         settingsFile << """
             throw new RuntimeException("Boom")
         """
@@ -254,7 +254,7 @@ class WatchedDirectoriesFileSystemWatchingIntegrationTest extends AbstractFileSy
         succeeds "help"
     }
 
-    def "watches the roots of #repositoryType file repositories"() {
+    def "does not watch files in #repositoryType file repositories"() {
         def repo = this."${repositoryType}"("repo")
         def moduleA = repo.module('group', 'projectA', '9.1')
         moduleA.publish()
@@ -275,7 +275,7 @@ class WatchedDirectoriesFileSystemWatchingIntegrationTest extends AbstractFileSy
         when:
         withWatchFs().run "retrieve", "--info"
         then:
-        assertWatchedHierarchies([projectDir, moduleA."${artifactFileProperty}".parentFile])
+        assertWatchedHierarchies([projectDir])
 
         where:
         repositoryType | artifactFileProperty
@@ -323,12 +323,40 @@ class WatchedDirectoriesFileSystemWatchingIntegrationTest extends AbstractFileSy
         assertWatchedHierarchies([projectDir])
     }
 
-    void assertWatchedRootDirectories(List<Set<File>> expectedWatchedRootDirectories) {
-        if (!hierarchicalWatcher) {
-            // There is no info logging for non-hierarchical watchers
-            return
+    def "stops watching hierarchies when the limit has been reached"() {
+        buildTestFixture.withBuildInSubDir()
+        def includedBuild = singleProjectBuild("includedBuild") {
+            buildFile << """
+                apply plugin: 'java'
+            """
         }
-        assert determineWatchedBuildRootDirectories(output) == expectedWatchedRootDirectories
+        def consumer = singleProjectBuild("consumer") {
+            buildFile << """
+                apply plugin: 'java'
+
+                dependencies {
+                    implementation "org.test:includedBuild:1.0"
+                }
+            """
+            settingsFile << """
+                includeBuild("../includedBuild")
+            """
+        }
+        executer.beforeExecute {
+            inDirectory(consumer)
+        }
+        file("consumer/gradle.properties") << "systemProp.${VirtualFileSystemServices.MAX_HIERARCHIES_TO_WATCH_PROPERTY}=1"
+
+        when:
+        withWatchFs().run "assemble", "--info"
+        then:
+        executedAndNotSkipped(":includedBuild:jar")
+        assertWatchedHierarchies([includedBuild])
+        postBuildOutputContains("Watching too many directories in the file system (watching 2, limit 1), dropping some state from the virtual file system")
+    }
+
+    void assertWatchableHierarchies(List<Set<File>> expectedWatchableHierarchies) {
+        assert determineWatchableHierarchies(output) == expectedWatchableHierarchies
     }
 
     void assertWatchedHierarchies(Iterable<File> expected) {
@@ -351,11 +379,11 @@ class WatchedDirectoriesFileSystemWatchingIntegrationTest extends AbstractFileSy
         !OperatingSystem.current().linux
     }
 
-    private static List<Set<File>> determineWatchedBuildRootDirectories(String output) {
+    private static List<Set<File>> determineWatchableHierarchies(String output) {
         output.readLines()
-            .findAll { it.contains("] as root project directories") }
+            .findAll { it.contains("] as hierarchies to watch") }
             .collect { line ->
-                def matcher = line =~ /Now considering watching \[(.*)] as root project directories/
+                def matcher = line =~ /Now considering \[(.*)] as hierarchies to watch/
                 String directories = matcher[0][1]
                 return directories.split(', ').collect { new File(it) } as Set
             }

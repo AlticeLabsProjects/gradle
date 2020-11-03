@@ -16,12 +16,24 @@
 
 package org.gradle.test.fixtures.keystore
 
+import groovy.transform.CompileStatic
 import org.apache.commons.io.FileUtils
+import org.eclipse.jetty.util.ssl.SslContextFactory
+import org.gradle.api.Action
 import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
 import org.gradle.integtests.fixtures.executer.GradleExecuter
+import org.gradle.internal.Actions
 import org.gradle.test.fixtures.file.TestFile
 import org.gradle.test.fixtures.server.http.HttpServerFixture
 
+import javax.net.ssl.KeyManager
+import javax.net.ssl.KeyManagerFactory
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
+import javax.net.ssl.TrustManagerFactory
+import java.security.KeyStore
+
+@CompileStatic
 class TestKeyStore {
     TestFile trustStore
     String trustStorePassword = "asdfgh"
@@ -32,12 +44,26 @@ class TestKeyStore {
         new TestKeyStore(rootDir)
     }
 
+    /*
+     clientStore/serverStore only contains self-signed certificates for embedded HTTPS server.
+     To make the client work with both embedded HTTPS server and real-world HTTPS server (e.g. Maven Central),
+     we need to merge JDK's cacerts into the custom truststore via:
+
+     keytool -importkeystore -srckeystore <JDK cacerts file location> -destkeystore <resource>/test-key-store/trustStore
+
+     Note:
+      1. Use JDK8 keytool command to make sure compatibility.
+      2. Default password for JDK cacerts is "changeit".
+
+     The current trustStore-adoptopenjdk-8 is created from AdoptOpenJDK8 cacerts.
+     */
+
     private TestKeyStore(TestFile rootDir) {
         keyStore = rootDir.file("clientStore")
         trustStore = rootDir.file("serverStore")
 
         copyCertFile("test-key-store/keyStore", keyStore)
-        copyCertFile("test-key-store/trustStore", trustStore)
+        copyCertFile("test-key-store/trustStore-adoptopenjdk-8.bin", trustStore)
     }
 
     private static void copyCertFile(String s, TestFile clientStore) {
@@ -45,17 +71,26 @@ class TestKeyStore {
         FileUtils.copyURLToFile(fileUrl, clientStore);
     }
 
-    void enableSslWithServerCert(HttpServerFixture server) {
-        server.enableSsl(trustStore.path, trustStorePassword)
+    void enableSslWithServerCert(
+        HttpServerFixture server,
+        Action<SslContextFactory.Server> configureServer = Actions.doNothing()
+    ) {
+        server.enableSsl(trustStore.path, trustStorePassword, null, null, configureServer)
     }
 
-    void enableSslWithServerAndClientCerts(HttpServerFixture server) {
-        server.enableSsl(trustStore.path, trustStorePassword, keyStore.path, keyStorePassword)
+    void enableSslWithServerAndClientCerts(
+        HttpServerFixture server,
+        Action<SslContextFactory.Server> configureServer = Actions.doNothing()
+    ) {
+        server.enableSsl(trustStore.path, trustStorePassword, keyStore.path, keyStorePassword, configureServer)
     }
 
-    void enableSslWithServerAndBadClientCert(HttpServerFixture server) {
+    void enableSslWithServerAndBadClientCert(
+        HttpServerFixture server,
+        Action<SslContextFactory.Server> configureServer = Actions.doNothing()
+    ) {
         // intentionally use wrong trust store for server
-        server.enableSsl(trustStore.path, trustStorePassword, trustStore.path, keyStorePassword)
+        server.enableSsl(trustStore.path, trustStorePassword, trustStore.path, keyStorePassword, configureServer)
     }
 
     void configureServerCert(GradleExecuter executer) {
@@ -98,6 +133,41 @@ class TestKeyStore {
          "-Djavax.net.ssl.trustStorePassword=$trustStorePassword",
          "-Djavax.net.ssl.keyStore=$keyStore.path",
          "-Djavax.net.ssl.keyStorePassword=$keyStorePassword"
-        ]
+        ].collect { it.toString() }
+    }
+
+    SSLContext asSSLContext() {
+        return createSSLContext(this)
+    }
+
+    /**
+     * Create the and initialize the SSLContext
+     */
+    private static SSLContext createSSLContext(TestKeyStore testKeyStore) {
+        try {
+            KeyStore keyStore = KeyStore.getInstance("JKS");
+            char[] keyStorePassword = testKeyStore.getKeyStorePassword().toCharArray();
+
+            testKeyStore.getKeyStore().withInputStream {keyStoreIn ->
+                keyStore.load(keyStoreIn, keyStorePassword)
+            }
+
+            // Create key manager
+            KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance("SunX509");
+            keyManagerFactory.init(keyStore, keyStorePassword);
+            KeyManager[] km = keyManagerFactory.getKeyManagers();
+
+            // Create trust manager
+            TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance("SunX509");
+            trustManagerFactory.init(keyStore);
+            TrustManager[] tm = trustManagerFactory.getTrustManagers();
+
+            // Initialize SSLContext
+            SSLContext sslContext = SSLContext.getInstance("TLS");
+            sslContext.init(km, tm, null);
+            return sslContext;
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 }

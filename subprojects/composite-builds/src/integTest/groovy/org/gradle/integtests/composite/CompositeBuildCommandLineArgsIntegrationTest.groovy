@@ -16,7 +16,7 @@
 
 package org.gradle.integtests.composite
 
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.integtests.fixtures.build.BuildTestFile
 import org.gradle.integtests.fixtures.resolve.ResolveTestFixture
 import org.gradle.test.fixtures.maven.MavenModule
@@ -42,7 +42,6 @@ class CompositeBuildCommandLineArgsIntegrationTest extends AbstractCompositeBuil
         includedBuilds << buildB
     }
 
-    @ToBeFixedForInstantExecution
     def "passes project properties to included build"() {
         given:
         dependency 'org.test:buildB:1.0'
@@ -63,7 +62,7 @@ class CompositeBuildCommandLineArgsIntegrationTest extends AbstractCompositeBuil
         assertTaskExecuted(":buildB", ":jar")
     }
 
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     def "passes system property arguments to included build"() {
         given:
         dependency 'org.test:buildB:1.0'
@@ -84,7 +83,6 @@ class CompositeBuildCommandLineArgsIntegrationTest extends AbstractCompositeBuil
         assertTaskExecuted(":buildB", ":jar")
     }
 
-    @ToBeFixedForInstantExecution
     def "can include same build multiple times using --include-build and settings.gradle"() {
         given:
         dependency 'org.test:buildB:1.0'
@@ -104,7 +102,6 @@ includeBuild '${buildB.toURI()}'
         assertTaskExecuted(":buildB", ":jar")
     }
 
-    @ToBeFixedForInstantExecution
     def "does not pass build-file argument when configuring included build"() {
         given:
         dependency 'org.test:buildB:1.0'
@@ -122,7 +119,6 @@ rootProject.buildFileName='build-copy.gradle'
         assertTaskExecuted(":buildB", ":jar")
     }
 
-    @ToBeFixedForInstantExecution
     def "does not pass settings-file argument when configuring included build"() {
         given:
         dependency 'org.test:buildB:1.0'
@@ -139,7 +135,6 @@ includeBuild '../buildB'
         assertTaskExecuted(":buildB", ":jar")
     }
 
-    @ToBeFixedForInstantExecution
     def "does not exclude tasks when building artifact for included build"() {
         given:
         dependency 'org.test:buildB:1.0'
@@ -152,7 +147,6 @@ includeBuild '../buildB'
     }
 
     // Included build tasks are incorrect executed with `--dry-run`. See gradle/composite-builds#113
-    @ToBeFixedForInstantExecution
     def "does not execute task actions when dry run specified on composite build"() {
         given:
         dependency 'org.test:buildB:1.0'

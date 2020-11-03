@@ -177,7 +177,7 @@ public class ScalaBasePlugin implements Plugin<Project> {
                 sourceSet.getAllJava().source(scalaDirectorySet);
                 sourceSet.getAllSource().source(scalaDirectorySet);
 
-                // Explicitly capture only a FileCollection in the lambda below for compatibility with instant-execution.
+                // Explicitly capture only a FileCollection in the lambda below for compatibility with configuration-cache.
                 FileCollection scalaSource = scalaDirectorySet;
                 sourceSet.getResources().getFilter().exclude(
                     spec(element -> scalaSource.contains(element.getFile()))
@@ -229,14 +229,14 @@ public class ScalaBasePlugin implements Plugin<Project> {
                     @Override
                     public void execute(ArtifactView.ViewConfiguration viewConfiguration) {
                         viewConfiguration.lenient(true);
-                        viewConfiguration.componentFilter(new Spec<ComponentIdentifier>() {
-                            @Override
-                            public boolean isSatisfiedBy(ComponentIdentifier element) {
-                                return element instanceof ProjectComponentIdentifier;
-                            }
-                        });
+                        viewConfiguration.componentFilter(new IsProjectComponent());
                     }
                 }).getFiles());
+
+                // See https://github.com/gradle/gradle/issues/14434.  We do this so that the incrementalScalaAnalysisForXXX configuration
+                // is resolved during task graph calculation.  It is not an input, but if we leave it to be resolved during task execution,
+                // it can potentially block trying to resolve project dependencies.
+                scalaCompile.dependsOn(scalaCompile.getAnalysisFiles());
             }
         });
         JvmPluginsHelper.configureOutputDirectoryForSourceSet(sourceSet, scalaSourceSet.getScala(), project, scalaCompile, scalaCompile.map(new Transformer<CompileOptions, ScalaCompile>() {
@@ -324,6 +324,13 @@ public class ScalaBasePlugin implements Plugin<Project> {
                     details.closestMatch(javaRuntime);
                 }
             }
+        }
+    }
+
+    private static class IsProjectComponent implements Spec<ComponentIdentifier> {
+        @Override
+        public boolean isSatisfiedBy(ComponentIdentifier element) {
+            return element instanceof ProjectComponentIdentifier;
         }
     }
 }

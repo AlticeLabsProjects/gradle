@@ -17,37 +17,36 @@
 package org.gradle.performance.experiment.maven
 
 import org.gradle.performance.AbstractGradleVsMavenPerformanceTest
-import org.gradle.performance.mutator.ApplyNonAbiChangeToJavaSourceFileMutator
+import org.gradle.performance.annotations.RunFor
+import org.gradle.performance.annotations.Scenario
+import org.gradle.performance.fixture.JavaTestProject
+import org.gradle.profiler.mutations.ApplyNonAbiChangeToJavaSourceFileMutator
 import spock.lang.Unroll
 
-import static org.gradle.performance.generator.JavaTestProject.MEDIUM_JAVA_MULTI_PROJECT
-import static org.gradle.performance.generator.JavaTestProject.MEDIUM_MONOLITHIC_JAVA_PROJECT
+import static org.gradle.performance.annotations.ScenarioType.EXPERIMENT
+import static org.gradle.performance.results.OperatingSystem.LINUX
 
 /**
  * Performance tests aimed at comparing the performance of Gradle for compiling and executing test suites, making
  * sure we are always faster than Maven.
  */
+@RunFor(
+    @Scenario(type = EXPERIMENT, operatingSystems = [LINUX], testProjects =  ["mediumMonolithicJavaProject", "mediumJavaMultiProject"])
+)
 class JavaTestGradleVsMavenPerformanceTest extends AbstractGradleVsMavenPerformanceTest {
 
     @Unroll
-    def "clean #gradleTask on #testProject (Gradle vs Maven)"() {
+    def "clean #gradleTask (Gradle vs Maven)"() {
         given:
         runner.testGroup = "Gradle vs Maven test build using Java plugin"
-        runner.testProject = testProject
-        runner.jvmOpts << "-Xms${testProject.daemonMemory}" << "-Xmx${testProject.daemonMemory}"
-        if (testProject.parallel) {
-            runner.mvnArgs << '-T' << testProject.maxWorkers
-        }
-        runner.gradleTasks = [gradleTask]
-        runner.equivalentMavenTasks = [mavenTask]
+        configureMavenOptions(JavaTestProject.projectFor(runner.testProject))
+        runner.gradleTasks = ["clean", gradleTask]
+        runner.equivalentMavenTasks = ["clean", mavenTask]
         if (mavenTask == "package") {
             runner.mvnArgs << "-Dmaven.test.skip=true"
         }
         runner.warmUpRuns = 2
         runner.runs = 5
-
-        runner.gradleCleanTasks = ["clean"]
-        runner.equivalentMavenCleanTasks = ["clean"]
 
         when:
         def results = runner.run()
@@ -56,29 +55,24 @@ class JavaTestGradleVsMavenPerformanceTest extends AbstractGradleVsMavenPerforma
         results.assertFasterThanMaven()
 
         where:
-        testProject                    | gradleTask | mavenTask
-        MEDIUM_MONOLITHIC_JAVA_PROJECT | 'assemble' | 'package'
-        MEDIUM_MONOLITHIC_JAVA_PROJECT | 'test'     | 'test'
-
-        MEDIUM_JAVA_MULTI_PROJECT      | 'assemble' | 'package'
-        MEDIUM_JAVA_MULTI_PROJECT      | 'test'     | 'test'
+        gradleTask | mavenTask
+        'assemble' | 'package'
+        'test'     | 'test'
     }
 
     @Unroll
-    def "#gradleTask for non-abi change on #testProject (Gradle vs Maven)"() {
+    def "#gradleTask for non-abi change (Gradle vs Maven)"() {
         given:
         runner.testGroup = "Gradle vs Maven test build using Java plugin"
-        runner.testProject = testProject
-        runner.jvmOpts << "-Xms${testProject.daemonMemory}" << "-Xmx${testProject.daemonMemory}"
-        if (testProject.parallel) {
-            runner.mvnArgs << '-T' << testProject.maxWorkers
-        }
+        def testProject = JavaTestProject.projectFor(runner.testProject)
+        def fileToChange = testProject.config.fileToChangeByScenario["assemble"]
+        configureMavenOptions(testProject)
         runner.gradleTasks = gradleTask.split(' ')
         runner.equivalentMavenTasks = mavenTask.split(' ')
-        if (mavenTask == "package") {
+        if (runner.equivalentMavenTasks.contains('package')) {
             runner.mvnArgs << "-Dmaven.test.skip=true"
         }
-        runner.buildExperimentListener = new ApplyNonAbiChangeToJavaSourceFileMutator(fileToChange)
+        runner.addBuildMutator { new ApplyNonAbiChangeToJavaSourceFileMutator(new File(it.projectDir, fileToChange)) }
         runner.warmUpRuns = 4
         runner.runs = 10
 
@@ -89,11 +83,16 @@ class JavaTestGradleVsMavenPerformanceTest extends AbstractGradleVsMavenPerforma
         results.assertFasterThanMaven()
 
         where:
-        testProject                    | gradleTask | mavenTask       | fileToChange
-        MEDIUM_MONOLITHIC_JAVA_PROJECT | 'test'     | 'clean test'    | "src/main/java/org/gradle/test/performance/mediummonolithicjavaproject/p0/Production0.java"
-        MEDIUM_MONOLITHIC_JAVA_PROJECT | 'assemble' | 'clean package' | "src/main/java/org/gradle/test/performance/mediummonolithicjavaproject/p0/Production0.java"
+        gradleTask | mavenTask
+        'assemble' | 'clean package'
+        'test'     | 'clean test'
+    }
 
-        MEDIUM_JAVA_MULTI_PROJECT      | 'test'     | 'clean test'    | "project0/src/main/java/org/gradle/test/performance/mediumjavamultiproject/project0/p0/Production0.java"
-        MEDIUM_JAVA_MULTI_PROJECT      | 'assemble' | 'clean package' | "project0/src/main/java/org/gradle/test/performance/mediumjavamultiproject/project0/p0/Production0.java"
+    void configureMavenOptions(JavaTestProject testProject) {
+        def daemonMemory = testProject.daemonMemory
+        runner.jvmOpts.addAll(["-Xms${daemonMemory}", "-Xmx${daemonMemory}"])
+        if (testProject.parallel) {
+            runner.mvnArgs << '-T' << testProject.maxWorkers
+        }
     }
 }

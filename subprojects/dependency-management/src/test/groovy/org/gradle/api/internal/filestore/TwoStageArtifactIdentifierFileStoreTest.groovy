@@ -18,7 +18,7 @@ package org.gradle.api.internal.filestore
 
 import org.gradle.api.Action
 import org.gradle.internal.component.external.model.ModuleComponentArtifactIdentifier
-import org.gradle.internal.resource.local.FileAccessTracker
+import org.gradle.internal.file.FileAccessTracker
 import org.gradle.internal.resource.local.LocallyAvailableExternalResource
 import spock.lang.Specification
 import spock.lang.Subject
@@ -104,16 +104,5 @@ class TwoStageArtifactIdentifierFileStoreTest extends Specification {
         1 * writeStore.getFileAccessTracker() >> fat2
         1 * fat1.markAccessed(file)
         1 * fat2.markAccessed(file)
-
-        when:
-        twoStageStore.getFileAccessTracker().markAccessed([file])
-
-        then:
-        1 * readStore.getFileAccessTracker() >> fat1
-        1 * writeStore.getFileAccessTracker() >> fat2
-        1 * fat1.markAccessed([file])
-        1 * fat2.markAccessed([file])
     }
-
-
 }

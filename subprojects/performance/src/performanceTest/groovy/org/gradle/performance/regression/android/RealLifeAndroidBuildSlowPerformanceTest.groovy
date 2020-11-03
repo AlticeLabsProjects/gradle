@@ -16,30 +16,39 @@
 
 package org.gradle.performance.regression.android
 
-
-import org.gradle.performance.categories.SlowPerformanceRegressionTest
+import org.gradle.performance.annotations.RunFor
+import org.gradle.performance.annotations.Scenario
+import org.gradle.performance.fixture.IncrementalAndroidTestProject
 import org.gradle.profiler.mutations.AbstractCleanupMutator
 import org.gradle.profiler.mutations.ClearArtifactTransformCacheMutator
-import org.junit.experimental.categories.Category
-import spock.lang.Ignore
 import spock.lang.Unroll
 
-import static org.gradle.performance.regression.android.AndroidTestProject.LARGE_ANDROID_BUILD
-import static org.gradle.performance.regression.android.IncrementalAndroidTestProject.SANTA_TRACKER_KOTLIN
+import static org.gradle.performance.annotations.ScenarioType.SLOW
+import static org.gradle.performance.fixture.AndroidTestProject.LARGE_ANDROID_BUILD
+import static org.gradle.performance.fixture.IncrementalAndroidTestProject.SANTA_TRACKER_KOTLIN
+import static org.gradle.performance.results.OperatingSystem.LINUX
 
-@Category(SlowPerformanceRegressionTest)
 class RealLifeAndroidBuildSlowPerformanceTest extends AbstractRealLifeAndroidBuildPerformanceTest {
 
+    @RunFor([
+        @Scenario(type = SLOW, operatingSystems = [LINUX], testProjects = ["largeAndroidBuild", "santaTrackerAndroidBuild"], iterationMatcher = "clean assemble.*"),
+        @Scenario(type = SLOW, operatingSystems = [LINUX], testProjects = ["largeAndroidBuild"], iterationMatcher = "clean phthalic.*")
+    ])
     @Unroll
-    @Ignore('https://github.com/gradle/gradle-private/issues/3113')
-    def "clean #tasks on #testProject with clean transforms cache"() {
+    def "clean #tasks with clean transforms cache"() {
         given:
+        def testProject = androidTestProject
+        boolean isLargeProject = androidTestProject == LARGE_ANDROID_BUILD
+        if (isLargeProject) {
+            runner.warmUpRuns = 2
+            runner.runs = 8
+        }
+
         testProject.configure(runner)
         runner.tasksToRun = tasks.split(' ')
         runner.args.add('-Dorg.gradle.parallel=true')
-        runner.warmUpRuns = warmUpRuns
         runner.cleanTasks = ["clean"]
-        runner.runs = runs
+        runner.useDaemon = false
         runner.addBuildMutator { invocationSettings ->
             new ClearArtifactTransformCacheMutator(invocationSettings.getGradleUserHome(), AbstractCleanupMutator.CleanupSchedule.BUILD)
         }
@@ -47,7 +56,7 @@ class RealLifeAndroidBuildSlowPerformanceTest extends AbstractRealLifeAndroidBui
 
         and:
         if (testProject == SANTA_TRACKER_KOTLIN) {
-            (testProject as IncrementalAndroidTestProject).configureForLatestAgpVersionOfMinor(runner, SANTA_AGP_TARGET_VERSION)
+            IncrementalAndroidTestProject.configureForLatestAgpVersionOfMinor(runner, SANTA_AGP_TARGET_VERSION)
         }
 
         when:
@@ -57,9 +66,6 @@ class RealLifeAndroidBuildSlowPerformanceTest extends AbstractRealLifeAndroidBui
         result.assertCurrentVersionHasNotRegressed()
 
         where:
-        testProject          | warmUpRuns | runs | tasks
-        LARGE_ANDROID_BUILD  | 2          | 8    | 'phthalic:assembleDebug'
-        LARGE_ANDROID_BUILD  | 2          | 8    | 'assembleDebug'
-        SANTA_TRACKER_KOTLIN | null       | null | 'assembleDebug'
+        tasks << ['assembleDebug', 'phthalic:assembleDebug']
     }
 }

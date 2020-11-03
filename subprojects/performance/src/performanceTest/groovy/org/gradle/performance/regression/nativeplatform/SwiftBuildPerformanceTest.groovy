@@ -16,71 +16,70 @@
 
 package org.gradle.performance.regression.nativeplatform
 
-import org.gradle.initialization.ParallelismBuildOptions
-import org.gradle.performance.AbstractCrossVersionGradleInternalPerformanceTest
-import org.gradle.performance.mutator.AbstractFileChangeMutator
-import spock.lang.Unroll
+import org.gradle.performance.AbstractCrossVersionPerformanceTest
+import org.gradle.performance.annotations.RunFor
+import org.gradle.performance.annotations.Scenario
+import org.gradle.profiler.BuildContext
+import org.gradle.profiler.mutations.AbstractFileChangeMutator
 
-class SwiftBuildPerformanceTest extends AbstractCrossVersionGradleInternalPerformanceTest {
+import static org.gradle.performance.annotations.ScenarioType.TEST
+import static org.gradle.performance.results.OperatingSystem.LINUX
 
+@RunFor(
+    @Scenario(type = TEST, operatingSystems = [LINUX], testProjects = ["mediumSwiftMulti", "bigSwiftApp"])
+)
+class SwiftBuildPerformanceTest extends AbstractCrossVersionPerformanceTest {
     def setup() {
         runner.minimumBaseVersion = '4.6'
-        runner.targetVersions = ["6.7-20200723220251+0000"]
-        runner.args += ["--parallel", "--${ParallelismBuildOptions.MaxWorkersOption.LONG_OPTION}=6"]
+        runner.targetVersions = ["6.8-20201028230040+0000"]
     }
 
-    @Unroll
-    def "up-to-date assemble on #testProject"() {
+    def "up-to-date assemble (swift)"() {
         given:
-        runner.testProject = testProject
         runner.tasksToRun = ["assemble"]
-        runner.gradleOpts = ["-Xms$maxMemory", "-Xmx$maxMemory"]
 
         when:
         def result = runner.run()
 
         then:
         result.assertCurrentVersionHasNotRegressed()
-
-        where:
-        testProject        | maxMemory
-        'mediumSwiftMulti' | '1G'
-        'bigSwiftApp'      | '1G'
     }
 
-    @Unroll
-    def "incremental compile on #testProject"() {
+    def "incremental compile"() {
         given:
-        runner.testProject = testProject
         runner.tasksToRun = ["assemble"]
-        runner.gradleOpts = ["-Xms$maxMemory", "-Xmx$maxMemory"]
-        runner.addBuildExperimentListener(new ChangeSwiftFileMutator(fileToChange))
+        runner.addBuildMutator { invocationSettings -> new ChangeSwiftFileMutator(new File(invocationSettings.projectDir, determineFileToChange(runner.testProject))) }
 
         when:
         def result = runner.run()
 
         then:
         result.assertCurrentVersionHasNotRegressed()
+    }
 
-        where:
-        testProject        | maxMemory | fileToChange
-        "mediumSwiftMulti" | '1G'      | 'lib6api3/src/main/swift/Lib6Api3Impl2Api.swift'
-        'bigSwiftApp'      | '1G'      | 'src/main/swift//AppImpl54Api3.swift'
+    static String determineFileToChange(String testProject) {
+        switch (testProject) {
+            case 'mediumSwiftMulti':
+                return 'lib6api3/src/main/swift/Lib6Api3Impl2Api.swift'
+            case 'bigSwiftApp':
+                return 'src/main/swift//AppImpl54Api3.swift'
+            default:
+                throw new IllegalArgumentException("Invalid test project ${testProject}")
+        }
     }
 
     private static class ChangeSwiftFileMutator extends AbstractFileChangeMutator {
-
-        ChangeSwiftFileMutator(String sourceFilePath) {
-            super(sourceFilePath)
-            if (!sourceFilePath.endsWith('.swift')) {
+        ChangeSwiftFileMutator(File sourceFile) {
+            super(sourceFile)
+            if (!sourceFile.absolutePath.endsWith('.swift')) {
                 throw new IllegalArgumentException('Can only modify Swift source')
             }
         }
 
         @Override
-        protected void applyChangeTo(StringBuilder text) {
+        protected void applyChangeTo(BuildContext context, StringBuilder text) {
             def location = text.indexOf("public init() { }")
-            text.insert(location, "var ${uniqueText} : Int = 0\n    ")
+            text.insert(location, "var ${context.getUniqueBuildId()} : Int = 0\n    ")
         }
     }
 

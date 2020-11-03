@@ -16,10 +16,7 @@
 
 package org.gradle.integtests.composite
 
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
-
 class CompositeBuildNestedBuildLookupIntegrationTest extends AbstractCompositeBuildIntegrationTest {
-    @ToBeFixedForInstantExecution
     def "can query the included builds defined by an included build"() {
         given:
         def buildC = singleProjectBuild("buildC") {
@@ -32,7 +29,7 @@ class CompositeBuildNestedBuildLookupIntegrationTest extends AbstractCompositeBu
                 assert gradle.includedBuild("buildC").name == "buildC"
                 assert gradle.includedBuild("buildC").projectDir == file("${buildC.toURI()}")
                 assert gradle.includedBuilds.name == ["buildC"]
-                
+
                 task broken {
                     doLast {
                         assert gradle.includedBuilds.name == ["buildC"]
@@ -56,13 +53,12 @@ class CompositeBuildNestedBuildLookupIntegrationTest extends AbstractCompositeBu
         failure.assertHasCause("Included build 'unknown' not found in build 'buildB'.")
     }
 
-    @ToBeFixedForInstantExecution
     def "other builds are not visible from included build"() {
         given:
         def buildC = singleProjectBuild("buildC") {
             buildFile << """
                 assert gradle.includedBuilds.empty
-            
+
                 task broken1 {
                     doLast {
                         assert gradle.includedBuilds.empty

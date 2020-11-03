@@ -16,9 +16,10 @@
 
 package org.gradle.testing
 
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.integtests.fixtures.TargetCoverage
 import org.gradle.test.fixtures.file.TestFile
+import org.gradle.testing.fixture.JUnitCoverage
 import org.gradle.testing.fixture.JUnitMultiVersionIntegrationSpec
 import org.gradle.util.Requires
 import org.gradle.util.TestPrecondition
@@ -32,7 +33,7 @@ import static org.gradle.testing.fixture.JUnitCoverage.JUNIT_VINTAGE_JUPITER
 class TestTaskIntegrationTest extends JUnitMultiVersionIntegrationSpec {
 
     @Issue("GRADLE-2702")
-    @ToBeFixedForInstantExecution(because = "early dependency resolution")
+    @ToBeFixedForConfigurationCache(because = "early dependency resolution")
     def "should not resolve configuration results when there are no tests"() {
         buildFile << """
             apply plugin: 'java'
@@ -235,6 +236,53 @@ class TestTaskIntegrationTest extends JUnitMultiVersionIntegrationSpec {
 
         expect:
         succeeds("help")
+    }
+
+    @Unroll
+    def "reports failure of TestExecuter regardless of filters"() {
+        given:
+        file('src/test/java/MyTest.java') << standaloneTestClass()
+        buildFile << """
+            import org.gradle.api.internal.tasks.testing.*
+
+            apply plugin: 'java'
+
+            ${jcenterRepository()}
+            dependencies {
+                testImplementation 'junit:junit:${JUnitCoverage.NEWEST}'
+            }
+
+            test {
+                doFirst {
+                    testExecuter = new TestExecuter<JvmTestExecutionSpec>() {
+                        @Override
+                        void execute(JvmTestExecutionSpec testExecutionSpec, TestResultProcessor resultProcessor) {
+                            DefaultTestSuiteDescriptor suite = new DefaultTestSuiteDescriptor(testExecutionSpec.path, testExecutionSpec.path)
+                            resultProcessor.started(suite, new TestStartEvent(System.currentTimeMillis()))
+                            try {
+                                throw new RuntimeException("boom!")
+                            } finally {
+                                resultProcessor.completed(suite.getId(), new TestCompleteEvent(System.currentTimeMillis()))
+                            }
+                        }
+
+                        @Override
+                        void stopNow() {
+                            // do nothing
+                        }
+                    }
+                }
+            }
+        """
+
+        when:
+        fails("test", *extraArgs)
+
+        then:
+        result.assertHasCause('boom!')
+
+        where:
+        extraArgs << [[], ["--tests", "MyTest"]]
     }
 
     private static String standaloneTestClass() {

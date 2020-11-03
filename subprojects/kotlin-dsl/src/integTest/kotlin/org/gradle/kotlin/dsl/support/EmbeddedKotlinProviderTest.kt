@@ -1,6 +1,6 @@
 package org.gradle.kotlin.dsl.support
 
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.kotlin.dsl.embeddedKotlinVersion
 
 import org.gradle.kotlin.dsl.fixtures.AbstractKotlinIntegrationTest
@@ -15,7 +15,7 @@ import org.junit.Test
 class EmbeddedKotlinProviderTest : AbstractKotlinIntegrationTest() {
 
     @Test
-    @ToBeFixedForInstantExecution(because = ":buildEnvironment")
+    @ToBeFixedForConfigurationCache(because = ":buildEnvironment")
     fun `no extra dependencies are added to the buildscript classpath`() {
 
         val result = build("buildEnvironment")
@@ -24,10 +24,11 @@ class EmbeddedKotlinProviderTest : AbstractKotlinIntegrationTest() {
     }
 
     @Test
-    @ToBeFixedForInstantExecution(because = ":buildEnvironment")
+    @ToBeFixedForConfigurationCache(because = ":buildEnvironment")
     fun `embedded kotlin dependencies are pinned to the embedded version`() {
 
-        withBuildScript("""
+        withBuildScript(
+            """
             buildscript {
                 $repositoriesBlock
                 dependencies {
@@ -35,7 +36,8 @@ class EmbeddedKotlinProviderTest : AbstractKotlinIntegrationTest() {
                     classpath("org.jetbrains.kotlin:kotlin-reflect:1.0")
                 }
             }
-        """)
+            """
+        )
 
         val result = build("buildEnvironment")
 
@@ -45,13 +47,15 @@ class EmbeddedKotlinProviderTest : AbstractKotlinIntegrationTest() {
     }
 
     @Test
-    @ToBeFixedForInstantExecution(because = ":buildEnvironment")
+    @ToBeFixedForConfigurationCache(because = ":buildEnvironment")
     fun `stdlib and reflect are pinned to the embedded kotlin version for requested plugins`() {
-        withBuildScript("""
+        withBuildScript(
+            """
             plugins {
                 kotlin("jvm") version "1.3.31"
             }
-        """)
+            """
+        )
 
         val result = build("buildEnvironment")
 
@@ -61,16 +65,18 @@ class EmbeddedKotlinProviderTest : AbstractKotlinIntegrationTest() {
     }
 
     @Test
-    @ToBeFixedForInstantExecution(because = ":buildEnvironment")
+    @ToBeFixedForConfigurationCache(because = ":buildEnvironment")
     fun `compiler-embeddable is not pinned`() {
-        withBuildScript("""
+        withBuildScript(
+            """
             buildscript {
                 $repositoriesBlock
                 dependencies {
                     classpath("org.jetbrains.kotlin:kotlin-compiler-embeddable:1.3.31")
                 }
             }
-        """)
+            """
+        )
 
         val result = build("buildEnvironment")
 
@@ -80,7 +86,8 @@ class EmbeddedKotlinProviderTest : AbstractKotlinIntegrationTest() {
 
     @Test
     fun `fails with a reasonable message on conflict with embedded kotlin`() {
-        withBuildScript("""
+        withBuildScript(
+            """
             buildscript {
                 $repositoriesBlock
                 dependencies {
@@ -89,7 +96,8 @@ class EmbeddedKotlinProviderTest : AbstractKotlinIntegrationTest() {
                     }
                 }
             }
-        """)
+            """
+        )
 
         val result = buildAndFail("buildEnvironment")
 

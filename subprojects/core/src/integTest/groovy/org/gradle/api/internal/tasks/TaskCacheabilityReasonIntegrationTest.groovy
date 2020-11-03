@@ -56,7 +56,7 @@ class TaskCacheabilityReasonIntegrationTest extends AbstractIntegrationSpec impl
 
             @CacheableTask
             class Cacheable extends NotCacheable {}
-            
+
             class NoOutputs extends DefaultTask {
                 @TaskAction
                 void generate() {}
@@ -114,7 +114,7 @@ class TaskCacheabilityReasonIntegrationTest extends AbstractIntegrationSpec impl
                 @TaskAction
                 void generate() {}
             }
-            
+
             task noOutputs(type: CacheableNoOutputs) {}
         """
         when:
@@ -154,8 +154,6 @@ class TaskCacheabilityReasonIntegrationTest extends AbstractIntegrationSpec impl
     @Unroll
     def "cacheability for a task with @#annotation file tree outputs is NON_CACHEABLE_TREE_OUTPUT"() {
         buildFile << """
-            import javax.inject.Inject
-
             @CacheableTask
             abstract class PluralOutputs extends DefaultTask {
                 @$annotation
@@ -170,7 +168,7 @@ class TaskCacheabilityReasonIntegrationTest extends AbstractIntegrationSpec impl
                     layout.buildDirectory.file("some-dir/output.txt").get().asFile.text = "output"
                 }
             }
-            
+
             task pluralOutputs(type: PluralOutputs)
         """
         when:
@@ -193,7 +191,7 @@ class TaskCacheabilityReasonIntegrationTest extends AbstractIntegrationSpec impl
         withBuildCache().run "cacheable", "cacheableWithOverlap"
         then:
         assertCachingDisabledFor null, null, ":cacheable"
-        assertCachingDisabledFor OVERLAPPING_OUTPUTS, "Gradle does not know how file 'build${File.separator}tmp${File.separator}cacheable${File.separator}output.txt' was created (output property 'outputFile'). Task output caching requires exclusive access to output paths to guarantee correctness.", ":cacheableWithOverlap"
+        assertCachingDisabledFor OVERLAPPING_OUTPUTS, "Gradle does not know how file 'build${File.separator}tmp${File.separator}cacheable${File.separator}output.txt' was created (output property 'outputFile'). Task output caching requires exclusive access to output paths to guarantee correctness (i.e. multiple tasks are not allowed to produce output in the same location).", ":cacheableWithOverlap"
     }
 
     def "cacheability for a task with a cacheIf is CACHE_IF_SPEC_NOT_SATISFIED"() {
@@ -240,7 +238,7 @@ class TaskCacheabilityReasonIntegrationTest extends AbstractIntegrationSpec impl
                 @SkipWhenEmpty
                 FileCollection empty = project.layout.files()
             }
-            
+
             task cacheable(type: NoSources)
         """
         when:

@@ -21,6 +21,7 @@ import org.gradle.api.NamedDomainObjectContainer;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.Task;
+import org.gradle.api.artifacts.ArtifactView;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.ConfigurationContainer;
 import org.gradle.api.artifacts.ConfigurationPublications;
@@ -35,6 +36,7 @@ import org.gradle.api.component.SoftwareComponentFactory;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.internal.artifacts.ArtifactAttributes;
 import org.gradle.api.internal.artifacts.dsl.LazyPublishArtifact;
+import org.gradle.api.internal.artifacts.dsl.dependencies.DependencyFactory;
 import org.gradle.api.internal.component.BuildableJavaComponent;
 import org.gradle.api.internal.component.ComponentRegistry;
 import org.gradle.api.internal.plugins.DefaultArtifactPublicationSet;
@@ -50,6 +52,7 @@ import org.gradle.api.tasks.TaskProvider;
 import org.gradle.api.tasks.bundling.Jar;
 import org.gradle.api.tasks.testing.Test;
 import org.gradle.internal.cleanup.BuildOutputCleanupRegistry;
+import org.gradle.internal.component.local.model.OpaqueComponentIdentifier;
 import org.gradle.internal.deprecation.DeprecatableConfiguration;
 import org.gradle.language.jvm.tasks.ProcessResources;
 
@@ -65,7 +68,7 @@ import static org.gradle.api.plugins.internal.JvmPluginsHelper.configureJavaDocT
 /**
  * <p>A {@link Plugin} which compiles and tests Java source, and assembles it into a JAR file.</p>
  */
-public class JavaPlugin implements Plugin<ProjectInternal> {
+public class JavaPlugin implements Plugin<Project> {
     /**
      * The name of the task that processes resources.
      */
@@ -128,8 +131,8 @@ public class JavaPlugin implements Plugin<ProjectInternal> {
     public static final String IMPLEMENTATION_CONFIGURATION_NAME = "implementation";
 
     /**
-     * The name of the configuration used by consumers to get the API elements of a component, that is to say
-     * the dependencies which are required to compile against that component.
+     * The name of the configuration to define the API elements of a component.
+     * That is, the dependencies which are required to compile against that component.
      *
      * @since 3.4
      */
@@ -149,6 +152,15 @@ public class JavaPlugin implements Plugin<ProjectInternal> {
      * but not at runtime.
      */
     public static final String COMPILE_ONLY_CONFIGURATION_NAME = "compileOnly";
+
+    /**
+     * The name of the configuration to define the API elements of a component that are required to compile a component,
+     * but not at runtime.
+     *
+     * @since 6.7
+     */
+    @Incubating
+    public static final String COMPILE_ONLY_API_CONFIGURATION_NAME = "compileOnlyApi";
 
     /**
      * The name of the "runtime" configuration. This configuration is deprecated and doesn't represent a correct view of
@@ -284,18 +296,19 @@ public class JavaPlugin implements Plugin<ProjectInternal> {
     }
 
     @Override
-    public void apply(ProjectInternal project) {
+    public void apply(final Project project) {
         if (project.getPluginManager().hasPlugin("java-platform")) {
             throw new IllegalStateException("The \"java\" or \"java-library\" plugin cannot be applied together with the \"java-platform\" plugin. " +
                 "A project is either a platform or a library but cannot be both at the same time.");
         }
+        final ProjectInternal projectInternal = (ProjectInternal) project;
 
         project.getPluginManager().apply(JavaBasePlugin.class);
 
         JavaPluginExtension javaPluginExtension = project.getExtensions().getByType(JavaPluginExtension.class);
         JavaPluginConvention javaConvention = project.getConvention().getPlugin(JavaPluginConvention.class);
-        project.getServices().get(ComponentRegistry.class).setMainComponent(new BuildableJavaComponentImpl(javaConvention));
-        BuildOutputCleanupRegistry buildOutputCleanupRegistry = project.getServices().get(BuildOutputCleanupRegistry.class);
+        projectInternal.getServices().get(ComponentRegistry.class).setMainComponent(new BuildableJavaComponentImpl(javaConvention));
+        BuildOutputCleanupRegistry buildOutputCleanupRegistry = projectInternal.getServices().get(BuildOutputCleanupRegistry.class);
 
         configureSourceSets(javaConvention, buildOutputCleanupRegistry);
         configureConfigurations(project, javaConvention);
@@ -355,7 +368,7 @@ public class JavaPlugin implements Plugin<ProjectInternal> {
         return pluginConvention.getSourceSets().getByName(mainSourceSetName);
     }
 
-    private void configureJavadocTask(ProjectInternal project, JavaPluginExtension javaPluginExtension, JavaPluginConvention pluginConvention) {
+    private void configureJavadocTask(Project project, JavaPluginExtension javaPluginExtension, JavaPluginConvention pluginConvention) {
         SourceSet main = mainSourceSetOf(pluginConvention);
         configureJavaDocTask(null, main, project.getTasks(), javaPluginExtension);
     }
@@ -492,11 +505,18 @@ public class JavaPlugin implements Plugin<ProjectInternal> {
         public FileCollection getRuntimeClasspath() {
             ProjectInternal project = convention.getProject();
             SourceSet mainSourceSet = mainSourceSetOf(convention);
-            FileCollection runtimeClasspath = mainSourceSet.getRuntimeClasspath();
-            FileCollection gradleApi = project.getConfigurations().detachedConfiguration(project.getDependencies().gradleApi(), project.getDependencies().localGroovy());
+            Configuration runtimeClasspath = project.getConfigurations().getByName(mainSourceSet.getRuntimeClasspathConfigurationName());
+            ArtifactView view = runtimeClasspath.getIncoming().artifactView(config -> {
+                config.componentFilter(componentId -> {
+                    if (componentId instanceof OpaqueComponentIdentifier) {
+                        DependencyFactory.ClassPathNotation classPathNotation = ((OpaqueComponentIdentifier) componentId).getClassPathNotation();
+                        return classPathNotation != DependencyFactory.ClassPathNotation.GRADLE_API && classPathNotation != DependencyFactory.ClassPathNotation.LOCAL_GROOVY;
+                    }
+                    return true;
+                });
+            });
             Configuration runtimeElements = project.getConfigurations().getByName(mainSourceSet.getRuntimeElementsConfigurationName());
-            FileCollection mainSourceSetArtifact = runtimeElements.getOutgoing().getArtifacts().getFiles();
-            return mainSourceSetArtifact.plus(runtimeClasspath.minus(mainSourceSet.getOutput()).minus(gradleApi));
+            return runtimeElements.getOutgoing().getArtifacts().getFiles().plus(view.getFiles());
         }
 
         @Override

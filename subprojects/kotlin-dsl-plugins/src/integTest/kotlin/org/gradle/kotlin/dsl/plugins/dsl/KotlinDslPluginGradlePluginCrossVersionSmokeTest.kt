@@ -17,7 +17,7 @@
 package org.gradle.kotlin.dsl.plugins.dsl
 
 import org.gradle.integtests.fixtures.RepoScriptBlockUtil
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.kotlin.dsl.*
 import org.gradle.kotlin.dsl.fixtures.AbstractPluginTest
 import org.gradle.test.fixtures.dsl.GradleDsl
@@ -44,6 +44,8 @@ class KotlinDslPluginGradlePluginCrossVersionSmokeTest(
         @JvmStatic
         fun testedKotlinVersions() = listOf(
             embeddedKotlinVersion,
+            "1.4.0",
+            "1.3.72",
             "1.3.60",
             "1.3.40",
             "1.3.30"
@@ -52,13 +54,13 @@ class KotlinDslPluginGradlePluginCrossVersionSmokeTest(
 
     @Test
     @LeaksFileHandles("Kotlin Compiler Daemon working directory")
-    @ToBeFixedForInstantExecution(
-        skip = ToBeFixedForInstantExecution.Skip.FLAKY,
-        because = "OOME and stack overflows with 1.3.30, plus configuration cache does not work for <1.3.70"
+    @ToBeFixedForConfigurationCache(
+        skip = ToBeFixedForConfigurationCache.Skip.FLAKY,
+        because = "OOME and stack overflows with 1.3.30, plus configuration cache does not work for other versions"
     )
     fun `kotlin-dsl plugin in buildSrc and production code using kotlin-gradle-plugin `() {
 
-        assumeNonEmbeddedGradleExecuter()
+        assumeNonEmbeddedGradleExecuter() // newer Kotlin version always leaks on the classpath when running embedded
 
         executer.noDeprecationChecks()
         // Ignore stacktraces when the Kotlin daemon fails
@@ -66,7 +68,9 @@ class KotlinDslPluginGradlePluginCrossVersionSmokeTest(
         executer.withStackTraceChecksDisabled()
 
         withDefaultSettingsIn("buildSrc")
-        withBuildScriptIn("buildSrc", """
+        withBuildScriptIn(
+            "buildSrc",
+            """
             import org.jetbrains.kotlin.config.KotlinCompilerVersion
 
             plugins {
@@ -80,12 +84,15 @@ class KotlinDslPluginGradlePluginCrossVersionSmokeTest(
             }
 
             println("buildSrc build script classpath kotlin compiler version " + KotlinCompilerVersion.VERSION)
-        """)
-        withFile("buildSrc/src/main/kotlin/my-plugin.gradle.kts", """
-            apply<org.jetbrains.kotlin.gradle.plugin.KotlinPlatformJvmPlugin>()
-        """)
+            """
+        )
+        withFile(
+            "buildSrc/src/main/kotlin/my-plugin.gradle.kts",
+            "apply(plugin = \"kotlin\")"
+        )
 
-        withBuildScript("""
+        withBuildScript(
+            """
             import org.jetbrains.kotlin.config.KotlinCompilerVersion
 
             plugins {
@@ -101,7 +108,8 @@ class KotlinDslPluginGradlePluginCrossVersionSmokeTest(
             }
 
             println("root build script classpath kotlin compiler version " + KotlinCompilerVersion.VERSION)
-        """)
+            """
+        )
         withFile("src/main/kotlin/SomeSource.kt", "fun main(args: Array<String>) {}")
 
         build("classes").apply {

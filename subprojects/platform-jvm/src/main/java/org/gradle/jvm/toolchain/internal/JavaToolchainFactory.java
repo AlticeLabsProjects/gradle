@@ -17,28 +17,28 @@
 package org.gradle.jvm.toolchain.internal;
 
 import org.gradle.api.internal.file.FileFactory;
-import org.gradle.jvm.toolchain.JavaInstallation;
-import org.gradle.jvm.toolchain.JavaInstallationRegistry;
 
 import javax.inject.Inject;
 import java.io.File;
 
 public class JavaToolchainFactory {
 
-    private FileFactory fileFactory;
-    private JavaInstallationRegistry installationRegistry;
-    private JavaCompilerFactory compilerFactory;
+    private final JavaInstallationProbe probeService;
+    private final JavaCompilerFactory compilerFactory;
+    private final ToolchainToolFactory toolFactory;
+    private final FileFactory fileFactory;
 
     @Inject
-    public JavaToolchainFactory(FileFactory fileFactory, JavaInstallationRegistry installationRegistry, JavaCompilerFactory compilerFactory) {
-        this.fileFactory = fileFactory;
-        this.installationRegistry = installationRegistry;
+    public JavaToolchainFactory(JavaInstallationProbe probeService, JavaCompilerFactory compilerFactory, ToolchainToolFactory toolFactory, FileFactory fileFactory) {
+        this.probeService = probeService;
         this.compilerFactory = compilerFactory;
+        this.toolFactory = toolFactory;
+        this.fileFactory = fileFactory;
     }
 
     public JavaToolchain newInstance(File javaHome) {
-        final JavaInstallation installation = installationRegistry.installationForDirectory(fileFactory.dir(javaHome)).get();
-        return new JavaToolchain(installation, compilerFactory);
+        final JavaInstallationProbe.ProbeResult probeResult = probeService.checkJdk(javaHome);
+        return new JavaToolchain(probeResult, compilerFactory, toolFactory, fileFactory);
     }
 
 }

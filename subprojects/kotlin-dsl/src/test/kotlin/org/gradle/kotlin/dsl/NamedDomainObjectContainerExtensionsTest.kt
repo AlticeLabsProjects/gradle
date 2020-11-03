@@ -6,22 +6,18 @@ import com.nhaarman.mockito_kotlin.eq
 import com.nhaarman.mockito_kotlin.inOrder
 import com.nhaarman.mockito_kotlin.mock
 import com.nhaarman.mockito_kotlin.verify
-
 import org.gradle.api.Action
 import org.gradle.api.NamedDomainObjectContainer
 import org.gradle.api.NamedDomainObjectProvider
 import org.gradle.api.PolymorphicDomainObjectContainer
 import org.gradle.api.Task
 import org.gradle.api.tasks.Delete
-import org.gradle.api.tasks.JavaExec
+import org.gradle.api.tasks.Exec
 import org.gradle.api.tasks.TaskContainer
-
 import org.gradle.kotlin.dsl.support.uncheckedCast
-
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.sameInstance
 import org.hamcrest.MatcherAssert.assertThat
-
 import org.junit.Test
 
 
@@ -43,14 +39,16 @@ class NamedDomainObjectContainerExtensionsTest {
             on { maybeCreate("john") } doReturn john
             on { named("marty") } doReturn marty
             on { register("doc") } doReturn doc
+            on { getByName(eq("alice"), any<Action<DomainObject>>()) } doReturn alice
+            on { create(eq("bob"), any<Action<DomainObject>>()) } doReturn bob
         }
 
         // regular syntax
         container.getByName("alice") {
-            it.foo = "alice-foo"
+            foo = "alice-foo"
         }
         container.create("bob") {
-            it.foo = "bob-foo"
+            foo = "bob-foo"
         }
         container.maybeCreate("john")
 
@@ -60,10 +58,10 @@ class NamedDomainObjectContainerExtensionsTest {
         // invoke syntax
         container {
             getByName("alice") {
-                it.foo = "alice-foo"
+                foo = "alice-foo"
             }
             create("bob") {
-                it.foo = "bob-foo"
+                foo = "bob-foo"
             }
             maybeCreate("john")
 
@@ -87,6 +85,7 @@ class NamedDomainObjectContainerExtensionsTest {
             on { getByName("alice") } doReturn alice
             on { maybeCreate("alice", DomainObjectBase.Foo::class.java) } doReturn alice
             on { create(eq("bob"), eq(DomainObjectBase.Bar::class.java), any<Action<DomainObjectBase.Bar>>()) } doReturn bob
+            on { create("john") } doReturn default
             on { create("john", DomainObjectBase.Default::class.java) } doReturn default
             onNamedWithAction("marty", DomainObjectBase.Foo::class, martyProvider)
             on { register(eq("doc"), eq(DomainObjectBase.Bar::class.java)) } doReturn docProviderAsBarProvider
@@ -166,11 +165,13 @@ class NamedDomainObjectContainerExtensionsTest {
 
         assertThat(
             alice,
-            equalTo(DomainObject("alice-foo", true)))
+            equalTo(DomainObject("alice-foo", true))
+        )
 
         assertThat(
             bob,
-            equalTo(DomainObject("bob-foo", false)))
+            equalTo(DomainObject("bob-foo", false))
+        )
     }
 
     sealed class DomainObjectBase {
@@ -214,11 +215,13 @@ class NamedDomainObjectContainerExtensionsTest {
 
         assertThat(
             alice,
-            equalTo(DomainObjectBase.Foo("foo")))
+            equalTo(DomainObjectBase.Foo("foo"))
+        )
 
         assertThat(
             bob,
-            equalTo(DomainObjectBase.Bar()))
+            equalTo(DomainObjectBase.Bar())
+        )
     }
 
     @Test
@@ -273,14 +276,14 @@ class NamedDomainObjectContainerExtensionsTest {
     @Test
     fun `can get element of specific type within configuration block via delegated property`() {
 
-        val task = mock<JavaExec>()
+        val task = mock<Exec>()
         val tasks = mock<TaskContainer> {
             on { getByName("hello") } doReturn task
         }
 
         @Suppress("unused_variable")
         tasks {
-            val hello by getting(JavaExec::class)
+            val hello by getting(Exec::class)
         }
         verify(tasks).getByName("hello")
     }

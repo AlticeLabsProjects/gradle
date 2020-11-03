@@ -39,7 +39,6 @@ import org.gradle.caching.internal.controller.service.StoreTarget;
 import org.gradle.caching.local.internal.BuildCacheTempFileStore;
 import org.gradle.caching.local.internal.DefaultBuildCacheTempFileStore;
 import org.gradle.caching.local.internal.LocalBuildCacheService;
-import org.gradle.internal.UncheckedException;
 import org.gradle.internal.operations.BuildOperationContext;
 import org.gradle.internal.operations.BuildOperationDescriptor;
 import org.gradle.internal.operations.BuildOperationExecutor;
@@ -51,7 +50,6 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.UncheckedIOException;
 import java.util.Optional;
 
 public class DefaultBuildCacheController implements BuildCacheController {
@@ -73,12 +71,13 @@ public class DefaultBuildCacheController implements BuildCacheController {
         BuildOperationExecutor buildOperationExecutor,
         File gradleUserHomeDir,
         boolean logStackTraces,
-        boolean emitDebugLogging
+        boolean emitDebugLogging,
+        boolean disableRemoteOnError
     ) {
         this.buildOperationExecutor = buildOperationExecutor;
         this.emitDebugLogging = emitDebugLogging;
         this.local = toLocalHandle(config.getLocal(), config.isLocalPush());
-        this.remote = toRemoteHandle(config.getRemote(), config.isRemotePush(), buildOperationExecutor, logStackTraces);
+        this.remote = toRemoteHandle(config.getRemote(), config.isRemotePush(), buildOperationExecutor, logStackTraces, disableRemoteOnError);
         this.tmp = toTempFileStore(config.getLocal(), gradleUserHomeDir);
     }
 
@@ -145,15 +144,13 @@ public class DefaultBuildCacheController implements BuildCacheController {
         public void execute(File file) {
             buildOperationExecutor.run(new RunnableBuildOperation() {
                 @Override
-                public void run(BuildOperationContext context) {
+                public void run(BuildOperationContext context) throws IOException {
                     try (InputStream input = new FileInputStream(file)) {
                         result = command.load(input);
-                    } catch (IOException e) {
-                        throw new UncheckedIOException(e);
+                        context.setResult(new UnpackOperationResult(
+                            result.getArtifactEntryCount()
+                        ));
                     }
-                    context.setResult(new UnpackOperationResult(
-                        result.getArtifactEntryCount()
-                    ));
                 }
 
                 @Override
@@ -200,15 +197,13 @@ public class DefaultBuildCacheController implements BuildCacheController {
         public void execute(final File file) {
             buildOperationExecutor.run(new RunnableBuildOperation() {
                 @Override
-                public void run(BuildOperationContext context) {
+                public void run(BuildOperationContext context) throws IOException {
                     try (FileOutputStream fileOutputStream = new FileOutputStream(file)) {
                         BuildCacheStoreCommand.Result result = command.store(fileOutputStream);
                         context.setResult(new PackOperationResult(
                             result.getArtifactEntryCount(),
                             file.length()
                         ));
-                    } catch (IOException e) {
-                        throw UncheckedException.throwAsUncheckedException(e);
                     }
                 }
 
@@ -233,10 +228,10 @@ public class DefaultBuildCacheController implements BuildCacheController {
         }
     }
 
-    private static BuildCacheServiceHandle toRemoteHandle(@Nullable BuildCacheService service, boolean push, BuildOperationExecutor buildOperationExecutor, boolean logStackTraces) {
+    private static BuildCacheServiceHandle toRemoteHandle(@Nullable BuildCacheService service, boolean push, BuildOperationExecutor buildOperationExecutor, boolean logStackTraces, boolean disableOnError) {
         return service == null
             ? NullBuildCacheServiceHandle.INSTANCE
-            : new OpFiringBuildCacheServiceHandle(service, push, BuildCacheServiceRole.REMOTE, buildOperationExecutor, logStackTraces);
+            : new OpFiringBuildCacheServiceHandle(service, push, BuildCacheServiceRole.REMOTE, buildOperationExecutor, logStackTraces, disableOnError);
     }
 
     private static LocalBuildCacheServiceHandle toLocalHandle(@Nullable LocalBuildCacheService local, boolean localPush) {

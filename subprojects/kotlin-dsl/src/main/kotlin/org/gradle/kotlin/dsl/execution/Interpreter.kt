@@ -27,10 +27,11 @@ import org.gradle.internal.classpath.ClassPath
 import org.gradle.internal.exceptions.LocationAwareException
 import org.gradle.internal.hash.HashCode
 import org.gradle.internal.service.ServiceRegistry
-import org.gradle.kotlin.dsl.accessors.projectAccessorsClassPath
+import org.gradle.kotlin.dsl.accessors.ProjectAccessorsClassPathGenerator
 import org.gradle.kotlin.dsl.support.KotlinScriptHost
 import org.gradle.kotlin.dsl.support.ScriptCompilationException
 import org.gradle.kotlin.dsl.support.loggerFor
+import org.gradle.kotlin.dsl.support.serviceOf
 import org.gradle.kotlin.dsl.support.serviceRegistryOf
 import org.gradle.kotlin.dsl.support.unsafeLazy
 import org.gradle.plugin.management.internal.PluginRequests
@@ -80,7 +81,7 @@ class Interpreter(val host: Host) {
             scriptHost: KotlinScriptHost<*>,
             templateId: String,
             sourceHash: HashCode,
-            parentClassLoader: ClassLoader,
+            compilationClassPathHash: HashCode,
             accessorsClassPath: ClassPath?,
             initializer: (File) -> Unit
         ): File
@@ -185,7 +186,6 @@ class Interpreter(val host: Host) {
                 scriptSource,
                 sourceHash,
                 templateId,
-                parentClassLoader,
                 targetScope,
                 baseScope,
                 programKind,
@@ -224,7 +224,8 @@ class Interpreter(val host: Host) {
             scriptHandler,
             targetScope,
             baseScope,
-            host.serviceRegistryFor(programTarget, target))
+            host.serviceRegistryFor(programTarget, target)
+        )
 
     private
     fun programHostFor(options: EvalOptions) =
@@ -236,7 +237,6 @@ class Interpreter(val host: Host) {
         scriptSource: ScriptSource,
         sourceHash: HashCode,
         templateId: String,
-        parentClassLoader: ClassLoader,
         targetScope: ClassLoaderScope,
         baseScope: ClassLoaderScope,
         programKind: ProgramKind,
@@ -252,12 +252,15 @@ class Interpreter(val host: Host) {
         val scriptPath =
             scriptHost.fileName
 
+        val compilationClassPath = host.compilationClassPathOf(targetScope.parent)
+        val compileClassPathHash = host.hashOf(compilationClassPath)
+
         val cachedDir =
             host.cachedDirFor(
                 scriptHost,
                 templateId,
                 sourceHash,
-                parentClassLoader,
+                compileClassPathHash,
                 null
             ) { cachedDir ->
 
@@ -282,7 +285,7 @@ class Interpreter(val host: Host) {
                     scriptSource.withLocationAwareExceptionHandling {
                         ResidualProgramCompiler(
                             outputDir = outputDir,
-                            classPath = host.compilationClassPathOf(targetScope.parent),
+                            classPath = compilationClassPath,
                             originalSourceHash = sourceHash,
                             programKind = programKind,
                             programTarget = programTarget,
@@ -392,8 +395,10 @@ class Interpreter(val host: Host) {
             val classPathHash: HashCode? =
                 accessorsClassPath?.let { host.hashOf(it) }
 
+            val compileClassPath = host.compilationClassPathOf(targetScope.parent)
+            val compileClassPathHash = host.hashOf(compileClassPath)
             val programId =
-                ProgramId(scriptTemplateId, sourceHash, parentClassLoader, classPathHash)
+                ProgramId(scriptTemplateId, sourceHash, parentClassLoader, classPathHash, compileClassPathHash)
 
             val cachedProgram =
                 host.cachedClassFor(programId)
@@ -409,20 +414,25 @@ class Interpreter(val host: Host) {
                     scriptHost,
                     scriptTemplateId,
                     sourceHash,
-                    accessorsClassPath)
+                    accessorsClassPath
+                )
 
             host.cache(
                 specializedProgram,
-                programId)
+                programId
+            )
 
             eval(specializedProgram.programFor, scriptHost)
         }
 
-        override fun accessorsClassPathFor(scriptHost: KotlinScriptHost<*>) =
-            projectAccessorsClassPath(
-                scriptHost.target as Project,
+        override fun accessorsClassPathFor(scriptHost: KotlinScriptHost<*>): ClassPath {
+            val project = scriptHost.target as Project
+            val projectAccessorsClassPathGenerator = project.serviceOf<ProjectAccessorsClassPathGenerator>()
+            return projectAccessorsClassPathGenerator.projectAccessorsClassPath(
+                project,
                 host.compilationClassPathOf(scriptHost.targetScope)
             ).bin
+        }
 
         override fun compileSecondStageOf(
             program: ExecutableProgram.StagedProgram,
@@ -440,30 +450,29 @@ class Interpreter(val host: Host) {
             val targetScope =
                 scriptHost.targetScope
 
-            val parentClassLoader =
-                targetScope.exportClassLoader
-
             val scriptSource =
                 scriptHost.scriptSource
+
+            val targetScopeClassPath =
+                host.compilationClassPathOf(targetScope)
+
+            val compilationClassPath =
+                accessorsClassPath?.let {
+                    targetScopeClassPath + it
+                } ?: targetScopeClassPath
+
+            val compileClassPathHash = host.hashOf(compilationClassPath)
 
             val cacheDir =
                 host.cachedDirFor(
                     scriptHost,
                     scriptTemplateId,
                     sourceHash,
-                    parentClassLoader,
+                    compileClassPathHash,
                     accessorsClassPath
                 ) { outputDir ->
 
                     startCompilerOperationFor(scriptSource, scriptTemplateId).use {
-
-                        val targetScopeClassPath =
-                            host.compilationClassPathOf(targetScope)
-
-                        val compilationClassPath =
-                            accessorsClassPath?.let {
-                                targetScopeClassPath + it
-                            } ?: targetScopeClassPath
 
                         scriptSource.withLocationAwareExceptionHandling {
 
@@ -493,7 +502,8 @@ class Interpreter(val host: Host) {
                 cacheDir,
                 scriptTemplateId,
                 accessorsClassPath,
-                scriptSource)
+                scriptSource
+            )
         }
 
         open fun eval(specializedProgram: Class<*>, scriptHost: KotlinScriptHost<*>) {

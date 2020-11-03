@@ -1,11 +1,9 @@
 package org.gradle.kotlin.dsl.integration
 
 import org.gradle.integtests.fixtures.RepoScriptBlockUtil.jcenterRepository
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.test.fixtures.dsl.GradleDsl
 import org.gradle.test.fixtures.file.LeaksFileHandles
-import org.gradle.util.TestPrecondition
-import org.junit.Assume.assumeTrue
 import org.junit.Test
 
 
@@ -13,13 +11,10 @@ import org.junit.Test
 class JacocoIntegrationTest : AbstractPluginIntegrationTest() {
 
     @Test
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     fun `jacoco ignore codegen`() {
-
-        assumeTrue(TestPrecondition.JDK14_OR_EARLIER.isFulfilled) // reevaluate when upgrading JaCoco from current 0.8.5
-        assumeNonEmbeddedGradleExecuter() // Classloader issue with pre-compiled script plugins lets ':compileKotlin' fail
-
-        withBuildScript("""
+        withBuildScript(
+            """
             plugins {
                 `kotlin-dsl`
                 jacoco
@@ -51,14 +46,18 @@ class JacocoIntegrationTest : AbstractPluginIntegrationTest() {
                     }
                 }
             }
-        """)
+            """
+        )
 
         withFile("src/main/kotlin/foo.gradle.kts", "plugins { base }")
-        withFile("src/test/kotlin/fooTest.kt", """
+        withFile(
+            "src/test/kotlin/fooTest.kt",
+            """
             import org.junit.Test
             class FooTest {
                 @Test fun testFoo() { }
-            }""".trimIndent()
+            }
+            """.trimIndent()
         )
 
         build("test", "jacocoTestCoverageVerification")

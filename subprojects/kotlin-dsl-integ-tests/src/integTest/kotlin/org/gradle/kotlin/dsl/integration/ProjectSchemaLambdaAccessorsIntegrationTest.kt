@@ -16,7 +16,7 @@
 
 package org.gradle.kotlin.dsl.integration
 
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.test.fixtures.file.LeaksFileHandles
 import org.gradle.test.fixtures.plugin.PluginBuilder
 import org.junit.Assert
@@ -43,7 +43,8 @@ class ProjectSchemaLambdaAccessorsIntegrationTest : AbstractPluginIntegrationTes
             generateForBuildSrc()
         }
 
-        withBuildScript("""
+        withBuildScript(
+            """
             plugins {
                 my
             }
@@ -54,7 +55,8 @@ class ProjectSchemaLambdaAccessorsIntegrationTest : AbstractPluginIntegrationTes
 
             val casted = closureExtension as groovy.lang.Closure<*>
             println(casted.call("some"))
-        """)
+            """
+        )
 
         build("help").apply {
             assertOutputContains("closureExtension: java.lang.Object")
@@ -63,20 +65,22 @@ class ProjectSchemaLambdaAccessorsIntegrationTest : AbstractPluginIntegrationTes
     }
 
     @Test
-    @ToBeFixedForInstantExecution(because = "Kotlin Gradle Plugin")
+    @ToBeFixedForConfigurationCache(because = "Kotlin Gradle Plugin")
     fun `accessors to __untyped__ kotlin lambda extensions are typed Any`() {
-
-        assumeNonEmbeddedGradleExecuter()
 
         withDefaultSettings()
         withKotlinBuildSrc()
-        withFile("buildSrc/src/main/kotlin/my.gradle.kts", """
+        withFile(
+            "buildSrc/src/main/kotlin/my.gradle.kts",
+            """
             extensions.add("lambdaExtension", { name: String ->
                 name.toUpperCase()
             })
-        """)
+            """
+        )
 
-        withBuildScript("""
+        withBuildScript(
+            """
             plugins {
                 my
             }
@@ -87,7 +91,8 @@ class ProjectSchemaLambdaAccessorsIntegrationTest : AbstractPluginIntegrationTes
 
             val casted = lambdaExtension as (String) -> String
             println(casted.invoke("some"))
-        """)
+            """
+        )
 
         build("help").apply {
             assertOutputContains("lambdaExtension: java.lang.Object")
@@ -99,7 +104,9 @@ class ProjectSchemaLambdaAccessorsIntegrationTest : AbstractPluginIntegrationTes
     fun `accessors to __untyped__ java lambda extensions are typed Any`() {
 
         withDefaultSettings()
-        withFile("buildSrc/build.gradle", """
+        withFile(
+            "buildSrc/build.gradle",
+            """
             plugins {
                 id("java")
                 id("java-gradle-plugin")
@@ -112,8 +119,11 @@ class ProjectSchemaLambdaAccessorsIntegrationTest : AbstractPluginIntegrationTes
                     }
                 }
             }
-        """)
-        withFile("buildSrc/src/main/java/my/MyPlugin.java", """
+            """
+        )
+        withFile(
+            "buildSrc/src/main/java/my/MyPlugin.java",
+            """
             package my;
 
             import org.gradle.api.*;
@@ -125,9 +135,11 @@ class ProjectSchemaLambdaAccessorsIntegrationTest : AbstractPluginIntegrationTes
                     project.getExtensions().add("lambdaExtension", lambda);
                 }
             }
-        """)
+            """
+        )
 
-        withBuildScript("""
+        withBuildScript(
+            """
             import java.util.function.Function
 
             plugins {
@@ -140,7 +152,8 @@ class ProjectSchemaLambdaAccessorsIntegrationTest : AbstractPluginIntegrationTes
 
             val casted = lambdaExtension as Function<String, String>
             println(casted.apply("some"))
-        """)
+            """
+        )
 
         build("help").apply {
             assertOutputContains("lambdaExtension: java.lang.Object")
@@ -165,7 +178,8 @@ class ProjectSchemaLambdaAccessorsIntegrationTest : AbstractPluginIntegrationTes
             generateForBuildSrc()
         }
 
-        withBuildScript("""
+        withBuildScript(
+            """
             plugins {
                 my
             }
@@ -175,7 +189,8 @@ class ProjectSchemaLambdaAccessorsIntegrationTest : AbstractPluginIntegrationTes
             println("closureExtension: " + typeOf(closureExtension))
 
             println(closureExtension.call("some"))
-        """)
+            """
+        )
 
         build("help").apply {
             assertOutputContains("closureExtension: groovy.lang.Closure<java.lang.String>")
@@ -185,20 +200,22 @@ class ProjectSchemaLambdaAccessorsIntegrationTest : AbstractPluginIntegrationTes
 
     @Test
     @Issue("https://github.com/gradle/gradle/issues/10772")
-    @ToBeFixedForInstantExecution(because = "Kotlin Gradle Plugin")
+    @ToBeFixedForConfigurationCache(because = "Kotlin Gradle Plugin")
     fun `accessors to __typed__ kotlin lambda extensions are typed`() {
-
-        assumeNonEmbeddedGradleExecuter()
 
         withDefaultSettings()
         withKotlinBuildSrc()
-        withFile("buildSrc/src/main/kotlin/my.gradle.kts", """
+        withFile(
+            "buildSrc/src/main/kotlin/my.gradle.kts",
+            """
             val typeToken = typeOf<(String) -> String>()
             val lambda = { name: String ->  name.toUpperCase() }
             extensions.add(typeToken, "lambdaExtension", lambda)
-        """)
+            """
+        )
 
-        withBuildScript("""
+        withBuildScript(
+            """
             plugins {
                 my
             }
@@ -208,7 +225,8 @@ class ProjectSchemaLambdaAccessorsIntegrationTest : AbstractPluginIntegrationTes
             println("lambdaExtension: " + typeOf(lambdaExtension))
 
             println(lambdaExtension("some"))
-        """)
+            """
+        )
 
         build("help").apply {
             assertOutputContains("lambdaExtension: kotlin.jvm.functions.Function1<? super java.lang.String, ? extends java.lang.String>")
@@ -222,7 +240,9 @@ class ProjectSchemaLambdaAccessorsIntegrationTest : AbstractPluginIntegrationTes
 
 
         withDefaultSettings()
-        withFile("buildSrc/build.gradle", """
+        withFile(
+            "buildSrc/build.gradle",
+            """
             plugins {
                 id("java")
                 id("java-gradle-plugin")
@@ -235,8 +255,11 @@ class ProjectSchemaLambdaAccessorsIntegrationTest : AbstractPluginIntegrationTes
                     }
                 }
             }
-        """)
-        withFile("buildSrc/src/main/java/my/MyPlugin.java", """
+            """
+        )
+        withFile(
+            "buildSrc/src/main/java/my/MyPlugin.java",
+            """
             package my;
 
             import org.gradle.api.*;
@@ -250,9 +273,11 @@ class ProjectSchemaLambdaAccessorsIntegrationTest : AbstractPluginIntegrationTes
                     project.getExtensions().add(typeToken, "lambdaExtension", lambda);
                 }
             }
-        """)
+            """
+        )
 
-        withBuildScript("""
+        withBuildScript(
+            """
             import java.util.function.Function
 
             plugins {
@@ -265,7 +290,8 @@ class ProjectSchemaLambdaAccessorsIntegrationTest : AbstractPluginIntegrationTes
 
             val casted = lambdaExtension as Function<String, String>
             println(casted.apply("some"))
-        """)
+            """
+        )
 
 
         // TODO:kotlin-dsl Remove once above issue is fixed

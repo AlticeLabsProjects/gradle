@@ -54,33 +54,40 @@ public class ChildBuildRegisteringSettingsLoader implements SettingsLoader {
         // Add included builds defined in settings
         List<IncludedBuildSpec> includedBuilds = settings.getIncludedBuilds();
         if (!includedBuilds.isEmpty()) {
-            Set<IncludedBuild> children = new LinkedHashSet<IncludedBuild>(includedBuilds.size());
+            Set<IncludedBuild> children = new LinkedHashSet<>(includedBuilds.size());
             for (IncludedBuildSpec includedBuildSpec : includedBuilds) {
-                gradle.getOwner().assertCanAdd(includedBuildSpec);
-
-                DefaultConfigurableIncludedBuild configurable = instantiator.newInstance(DefaultConfigurableIncludedBuild.class, includedBuildSpec.rootDir);
-                includedBuildSpec.configurer.execute(configurable);
-
-                BuildDefinition buildDefinition = BuildDefinition.fromStartParameterForBuild(
-                    gradle.getStartParameter(),
-                    configurable.getName(),
-                    includedBuildSpec.rootDir,
-                    PluginRequests.EMPTY,
-                    configurable.getDependencySubstitutionAction(),
-                    publicBuildPath
-                );
-
-                IncludedBuildState includedBuild = buildRegistry.addIncludedBuild(buildDefinition);
-
-                children.add(includedBuild.getModel());
+                if (!includedBuildSpec.rootDir.equals(buildRegistry.getRootBuild().getBuildRootDir())) {
+                    IncludedBuildState includedBuild = addIncludedBuild(includedBuildSpec, gradle);
+                    children.add(includedBuild.getModel());
+                } else {
+                    children.add(new IncludedRootBuild(buildRegistry.getRootBuild()));
+                }
             }
 
             // Set the visible included builds
             gradle.setIncludedBuilds(children);
         } else {
-            gradle.setIncludedBuilds(Collections.<IncludedBuild>emptyList());
+            gradle.setIncludedBuilds(Collections.emptyList());
         }
 
         return settings;
+    }
+
+    private IncludedBuildState addIncludedBuild(IncludedBuildSpec includedBuildSpec, GradleInternal gradle) {
+        gradle.getOwner().assertCanAdd(includedBuildSpec);
+
+        DefaultConfigurableIncludedBuild configurable = instantiator.newInstance(DefaultConfigurableIncludedBuild.class, includedBuildSpec.rootDir);
+        includedBuildSpec.configurer.execute(configurable);
+
+        BuildDefinition buildDefinition = BuildDefinition.fromStartParameterForBuild(
+            gradle.getStartParameter(),
+            configurable.getName(),
+            includedBuildSpec.rootDir,
+            PluginRequests.EMPTY,
+            configurable.getDependencySubstitutionAction(),
+            publicBuildPath
+        );
+
+        return buildRegistry.addIncludedBuild(buildDefinition);
     }
 }

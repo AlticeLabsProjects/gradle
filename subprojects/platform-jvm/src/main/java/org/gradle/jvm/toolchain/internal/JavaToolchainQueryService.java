@@ -16,48 +16,74 @@
 
 package org.gradle.jvm.toolchain.internal;
 
+import org.gradle.api.Transformer;
 import org.gradle.api.internal.provider.DefaultProvider;
-import org.gradle.api.internal.provider.Providers;
 import org.gradle.api.provider.Provider;
+import org.gradle.api.provider.ProviderFactory;
 import org.gradle.jvm.toolchain.JavaToolchainSpec;
+import org.gradle.jvm.toolchain.install.internal.DefaultJavaToolchainProvisioningService;
+import org.gradle.jvm.toolchain.install.internal.JavaToolchainProvisioningService;
 
 import javax.inject.Inject;
 import java.io.File;
+import java.util.Optional;
 import java.util.function.Predicate;
 
 public class JavaToolchainQueryService {
 
     private final SharedJavaInstallationRegistry registry;
     private final JavaToolchainFactory toolchainFactory;
+    private final JavaToolchainProvisioningService installService;
+    private final Provider<Boolean> detectEnabled;
+    private final Provider<Boolean> downloadEnabled;
 
     @Inject
-    public JavaToolchainQueryService(SharedJavaInstallationRegistry registry, JavaToolchainFactory toolchainFactory) {
+    public JavaToolchainQueryService(SharedJavaInstallationRegistry registry, JavaToolchainFactory toolchainFactory, JavaToolchainProvisioningService provisioningService, ProviderFactory factory) {
         this.registry = registry;
         this.toolchainFactory = toolchainFactory;
+        this.installService = provisioningService;
+        detectEnabled = factory.gradleProperty(AutoDetectingInstallationSupplier.AUTO_DETECT).forUseAtConfigurationTime().map(Boolean::parseBoolean);
+        downloadEnabled = factory.gradleProperty(DefaultJavaToolchainProvisioningService.AUTO_DOWNLOAD).forUseAtConfigurationTime().map(Boolean::parseBoolean);
     }
 
-    public Provider<JavaToolchain> findMatchingToolchain(JavaToolchainSpec filter) {
-        if (!((DefaultToolchainSpec) filter).isConfigured()) {
-            return Providers.notDefined();
-        }
-        return new DefaultProvider<>(() -> query(filter));
+    <T> Provider<T> toolFor(JavaToolchainSpec spec, Transformer<T, JavaToolchain> toolFunction) {
+        return findMatchingToolchain(spec).map(toolFunction);
+    }
+
+    Provider<JavaToolchain> findMatchingToolchain(JavaToolchainSpec filter) {
+        return new DefaultProvider<>(() -> {
+            if (((DefaultToolchainSpec) filter).isConfigured()) {
+                return query(filter);
+            } else {
+                return null;
+            }
+        });
     }
 
     private JavaToolchain query(JavaToolchainSpec filter) {
         return registry.listInstallations().stream()
+            .map(InstallationLocation::getLocation)
             .map(this::asToolchain)
             .filter(matchingToolchain(filter))
+            .sorted(new JavaToolchainComparator())
             .findFirst()
-            .orElseThrow(() -> new NoToolchainAvailableException(filter));
+            .orElseGet(() -> downloadToolchain(filter));
     }
 
-    // TODO: to be replaced with AttributeContainer/AttributeMatcher
+    private JavaToolchain downloadToolchain(JavaToolchainSpec spec) {
+        final Optional<File> installation = installService.tryInstall(spec);
+        return installation.map(this::asToolchain).orElseThrow(() -> noToolchainAvailable(spec));
+    }
+
+    private NoToolchainAvailableException noToolchainAvailable(JavaToolchainSpec spec) {
+        return new NoToolchainAvailableException(spec, detectEnabled.getOrElse(true), downloadEnabled.getOrElse(true));
+    }
+
     private Predicate<JavaToolchain> matchingToolchain(JavaToolchainSpec spec) {
-        return toolchain -> toolchain.getJavaMajorVersion() == spec.getLanguageVersion().get();
+        return toolchain -> toolchain.getLanguageVersion().equals(spec.getLanguageVersion().get());
     }
 
     private JavaToolchain asToolchain(File javaHome) {
         return toolchainFactory.newInstance(javaHome);
     }
-
 }

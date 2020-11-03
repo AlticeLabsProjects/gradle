@@ -73,9 +73,20 @@ public interface BuildStateRegistry {
     void beforeConfigureRootBuild();
 
     /**
+     * Notification that the root build has just finished configuration.
+     */
+    void afterConfigureRootBuild();
+
+    /**
      * Creates an included build. An included build is-a nested build whose projects and outputs are treated as part of the composite build.
      */
     IncludedBuildState addIncludedBuild(BuildDefinition buildDefinition);
+
+    /**
+     * Same as {@link #addIncludedBuild(BuildDefinition)} except the {@link IncludedBuildState} will be instantiated by
+     * the given factory.
+     */
+    IncludedBuildState addIncludedBuildOf(IncludedBuildFactory includedBuildFactory, BuildDefinition buildDefinition);
 
     /**
      * Creates an implicit included build. An implicit build is-a nested build that is managed by Gradle and whose outputs are used by dependency resolution.

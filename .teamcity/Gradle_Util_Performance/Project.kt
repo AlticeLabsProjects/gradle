@@ -1,8 +1,8 @@
 package Gradle_Util_Performance
 
 import Gradle_Util_Performance.buildTypes.AdHocPerformanceScenarioLinux
-import Gradle_Util_Performance.buildTypes.AdHocPerformanceTestCoordinatorLinux
-import Gradle_Util_Performance.buildTypes.AdHocPerformanceTestCoordinatorWindows
+import Gradle_Util_Performance.buildTypes.AdHocPerformanceScenarioMacOS
+import Gradle_Util_Performance.buildTypes.AdHocPerformanceScenarioWindows
 import jetbrains.buildServer.configs.kotlin.v2019_2.Project
 
 object Project : Project({
@@ -12,6 +12,10 @@ object Project : Project({
     name = "Performance"
 
     buildType(AdHocPerformanceScenarioLinux)
-    buildType(AdHocPerformanceTestCoordinatorLinux)
-    buildType(AdHocPerformanceTestCoordinatorWindows)
+    buildType(AdHocPerformanceScenarioWindows)
+    buildType(AdHocPerformanceScenarioMacOS)
+
+    params {
+        param("env.GRADLE_ENTERPRISE_ACCESS_KEY", "%ge.gradle.org.access.key%")
+    }
 })

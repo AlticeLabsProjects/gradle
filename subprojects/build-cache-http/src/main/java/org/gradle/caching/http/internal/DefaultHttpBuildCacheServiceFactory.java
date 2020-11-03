@@ -44,11 +44,13 @@ public class DefaultHttpBuildCacheServiceFactory implements BuildCacheServiceFac
 
     private final SslContextFactory sslContextFactory;
     private final HttpBuildCacheRequestCustomizer requestCustomizer;
+    private final HttpClientHelper.Factory httpClientHelperFactory;
 
     @Inject
-    public DefaultHttpBuildCacheServiceFactory(SslContextFactory sslContextFactory, HttpBuildCacheRequestCustomizer requestCustomizer) {
+    public DefaultHttpBuildCacheServiceFactory(SslContextFactory sslContextFactory, HttpBuildCacheRequestCustomizer requestCustomizer, HttpClientHelper.Factory httpClientHelperFactory) {
         this.sslContextFactory = sslContextFactory;
         this.requestCustomizer = requestCustomizer;
+        this.httpClientHelperFactory = httpClientHelperFactory;
     }
 
     @Override
@@ -88,7 +90,7 @@ public class DefaultHttpBuildCacheServiceFactory implements BuildCacheServiceFac
         } else {
             builder.withSslContextFactory(sslContextFactory);
         }
-        HttpClientHelper httpClientHelper = new HttpClientHelper(builder.build());
+        HttpClientHelper httpClientHelper = httpClientHelperFactory.create(builder.build());
 
         describer.type("HTTP")
             .config("url", noUserInfoUrl.toASCIIString())
@@ -104,7 +106,7 @@ public class DefaultHttpBuildCacheServiceFactory implements BuildCacheServiceFac
             .create(
                 url,
                 allowInsecureProtocol,
-                () -> DeprecationLogger.deprecate("Using insecure protocols with remote build cache")
+                () -> DeprecationLogger.deprecate("Using insecure protocols with remote build cache, without explicit opt-in,")
                     .withAdvice("Switch remote build cache to a secure protocol (like HTTPS) or allow insecure protocols.")
                     .willBeRemovedInGradle7()
                     .withDslReference(HttpBuildCache.class, "allowInsecureProtocol")

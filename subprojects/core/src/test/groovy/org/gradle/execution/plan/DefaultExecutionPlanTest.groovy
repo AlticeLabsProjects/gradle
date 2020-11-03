@@ -577,6 +577,26 @@ class DefaultExecutionPlanTest extends AbstractExecutionPlanSpec {
 """)
     }
 
+    @Issue("https://github.com/gradle/gradle/issues/2293")
+    def "circular dependency detected with finalizedBy cycle in the graph"() {
+        Task a = createTask("a")
+        Task b = createTask("b")
+        relationships(a, finalizedBy: [b])
+        relationships(b, finalizedBy: [b])
+
+        when:
+        addToGraphAndPopulate([a])
+
+        then:
+        CircularReferenceException e = thrown()
+        e.message == toPlatformLineSeparators("""Circular dependency between the following tasks:
+:b
+\\--- :b (*)
+
+(*) - details omitted (listed previously)
+""")
+    }
+
     def "stops returning tasks on task execution failure"() {
         def failures = []
         RuntimeException exception = new RuntimeException("failure")
@@ -853,7 +873,7 @@ class DefaultExecutionPlanTest extends AbstractExecutionPlanSpec {
 
     private Node node(Node... dependencies) {
         def action = Stub(WorkNodeAction)
-        _ * action.project >> null
+        _ * action.owningProject >> null
         def node = new ActionNode(action)
         dependencies.each {
             node.addDependencySuccessor(it)

@@ -16,25 +16,30 @@
 
 package org.gradle.performance.regression.corefeature
 
-import org.gradle.performance.AbstractCrossVersionGradleProfilerPerformanceTest
+import org.gradle.performance.AbstractCrossVersionPerformanceTest
 import org.gradle.performance.WithExternalRepository
+import org.gradle.performance.annotations.RunFor
+import org.gradle.performance.annotations.Scenario
 import spock.lang.Ignore
 import spock.lang.Unroll
 
-class LargeDependencyGraphPerformanceTest extends AbstractCrossVersionGradleProfilerPerformanceTest implements WithExternalRepository {
+import static org.gradle.performance.annotations.ScenarioType.TEST
+import static org.gradle.performance.results.OperatingSystem.LINUX
 
-    private final static TEST_PROJECT_NAME = 'excludeRuleMergingBuild'
+@RunFor(
+    @Scenario(type = TEST, operatingSystems = [LINUX], testProjects = ["excludeRuleMergingBuild"])
+)
+class LargeDependencyGraphPerformanceTest extends AbstractCrossVersionPerformanceTest implements WithExternalRepository {
+
     public static final String MIN_MEMORY = "-Xms800m"
     public static final String MAX_MEMORY = "-Xmx800m"
 
     def setup() {
         runner.minimumBaseVersion = '4.8'
-        runner.targetVersions = ["6.7-20200723220251+0000"]
+        runner.targetVersions = ["6.8-20201028230040+0000"]
     }
 
     def "resolve large dependency graph from file repo"() {
-        runner.testProject = TEST_PROJECT_NAME
-
         given:
         runner.tasksToRun = ['resolveDependencies']
         runner.gradleOpts = [MIN_MEMORY, MAX_MEMORY]
@@ -49,13 +54,12 @@ class LargeDependencyGraphPerformanceTest extends AbstractCrossVersionGradleProf
 
     @Unroll
     def "resolve large dependency graph (parallel = #parallel, locking = #locking)"() {
-        runner.testProject = TEST_PROJECT_NAME
         startServer()
 
         given:
         runner.tasksToRun = ['resolveDependencies']
         runner.gradleOpts = [MIN_MEMORY, MAX_MEMORY]
-        runner.targetVersions = ["6.7-20200723220251+0000"]
+        runner.targetVersions = ["6.8-20201028230040+0000"]
         runner.args = ['-PuseHttp', "-PhttpPort=${serverPort}", '-PnoExcludes']
         if (parallel) {
             runner.args += '--parallel'
@@ -81,7 +85,6 @@ class LargeDependencyGraphPerformanceTest extends AbstractCrossVersionGradleProf
     @Ignore
     def "resolve large dependency graph with strict versions"() {
         runner.minimumBaseVersion = '6.0'
-        runner.testProject = TEST_PROJECT_NAME
         startServer()
 
         given:

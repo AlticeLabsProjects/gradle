@@ -16,17 +16,31 @@
 
 package org.gradle.performance.regression.android
 
-
+import org.gradle.performance.annotations.RunFor
+import org.gradle.performance.annotations.Scenario
+import org.gradle.performance.fixture.AndroidTestProject
+import org.gradle.performance.fixture.IncrementalAndroidTestProject
 import spock.lang.Unroll
 
-import static org.gradle.performance.regression.android.AndroidTestProject.K9_ANDROID
-import static org.gradle.performance.regression.android.AndroidTestProject.LARGE_ANDROID_BUILD
-import static org.gradle.performance.regression.android.IncrementalAndroidTestProject.SANTA_TRACKER_KOTLIN
+import static org.gradle.performance.annotations.ScenarioType.TEST
+import static org.gradle.performance.fixture.AndroidTestProject.K9_ANDROID
+import static org.gradle.performance.results.OperatingSystem.LINUX
 
+@RunFor(
+    @Scenario(type = TEST, operatingSystems = [LINUX], testProjects = ["santaTrackerAndroidBuild"])
+)
 class RealLifeAndroidBuildPerformanceTest extends AbstractRealLifeAndroidBuildPerformanceTest {
+
     @Unroll
-    def "#tasks on #testProject"() {
+    @RunFor([
+        @Scenario(type = TEST, operatingSystems = [LINUX], testProjects = ["k9AndroidBuild", "largeAndroidBuild"], iterationMatcher = "run help"),
+        @Scenario(type = TEST, operatingSystems = [LINUX], testProjects = ["k9AndroidBuild", "largeAndroidBuild", "santaTrackerAndroidBuild"], iterationMatcher = "run assembleDebug"),
+        @Scenario(type = TEST, operatingSystems = [LINUX], testProjects = ["largeAndroidBuild"], iterationMatcher = ".*phthalic.*")
+    ])
+    def "run #tasks"() {
         given:
+        AndroidTestProject testProject = androidTestProject
+        boolean parallel = testProject != K9_ANDROID
         testProject.configure(runner)
         runner.tasksToRun = tasks.split(' ')
         if (parallel) {
@@ -37,8 +51,8 @@ class RealLifeAndroidBuildPerformanceTest extends AbstractRealLifeAndroidBuildPe
         applyEnterprisePlugin()
 
         and:
-        if (testProject == SANTA_TRACKER_KOTLIN) {
-            (testProject as IncrementalAndroidTestProject).configureForLatestAgpVersionOfMinor(runner, SANTA_AGP_TARGET_VERSION)
+        if (testProject instanceof IncrementalAndroidTestProject) {
+            IncrementalAndroidTestProject.configureForLatestAgpVersionOfMinor(runner, SANTA_AGP_TARGET_VERSION)
         }
 
         when:
@@ -48,21 +62,17 @@ class RealLifeAndroidBuildPerformanceTest extends AbstractRealLifeAndroidBuildPe
         result.assertCurrentVersionHasNotRegressed()
 
         where:
-        testProject          | parallel | warmUpRuns | runs | tasks
-        K9_ANDROID           | false    | null       | null | 'help'
-        K9_ANDROID           | false    | null       | null | 'assembleDebug'
-//        K9_ANDROID    | false    | null       | null | 'clean k9mail:assembleDebug'
-        LARGE_ANDROID_BUILD  | true     | null       | null | 'help'
-        LARGE_ANDROID_BUILD  | true     | null       | null | 'assembleDebug'
-        LARGE_ANDROID_BUILD  | true     | 2          | 8    | 'clean phthalic:assembleDebug'
-        SANTA_TRACKER_KOTLIN | true     | null       | null | 'assembleDebug'
+        tasks                          | warmUpRuns | runs
+        'help'                         | null       | null
+        'assembleDebug'                | null       | null
+        'clean phthalic:assembleDebug' | 2          | 8
     }
 
-    @Unroll
-    def "abi change on #testProject"() {
+    def "abi change"() {
         given:
+        def testProject = androidTestProject as IncrementalAndroidTestProject
         testProject.configureForAbiChange(runner)
-        testProject.configureForLatestAgpVersionOfMinor(runner, SANTA_AGP_TARGET_VERSION)
+        IncrementalAndroidTestProject.configureForLatestAgpVersionOfMinor(runner, SANTA_AGP_TARGET_VERSION)
         runner.args.add('-Dorg.gradle.parallel=true')
         applyEnterprisePlugin()
 
@@ -71,16 +81,13 @@ class RealLifeAndroidBuildPerformanceTest extends AbstractRealLifeAndroidBuildPe
 
         then:
         result.assertCurrentVersionHasNotRegressed()
-
-        where:
-        testProject << [SANTA_TRACKER_KOTLIN]
     }
 
-    @Unroll
-    def "non-abi change on #testProject"() {
+    def "non-abi change"() {
         given:
+        def testProject = androidTestProject as IncrementalAndroidTestProject
         testProject.configureForNonAbiChange(runner)
-        testProject.configureForLatestAgpVersionOfMinor(runner, SANTA_AGP_TARGET_VERSION)
+        IncrementalAndroidTestProject.configureForLatestAgpVersionOfMinor(runner, SANTA_AGP_TARGET_VERSION)
         runner.args.add('-Dorg.gradle.parallel=true')
         applyEnterprisePlugin()
 
@@ -89,8 +96,5 @@ class RealLifeAndroidBuildPerformanceTest extends AbstractRealLifeAndroidBuildPe
 
         then:
         result.assertCurrentVersionHasNotRegressed()
-
-        where:
-        testProject << [SANTA_TRACKER_KOTLIN]
     }
 }

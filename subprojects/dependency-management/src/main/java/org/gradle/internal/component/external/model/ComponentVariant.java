@@ -33,9 +33,6 @@ import java.util.List;
  * TODO - this should replace or merge into VariantResolveMetadata, OutgoingVariant, ConfigurationMetadata
  */
 public interface ComponentVariant extends VariantResolveMetadata {
-    @Override
-    String getName();
-
     ImmutableList<? extends Dependency> getDependencies();
 
     ImmutableList<? extends DependencyConstraint> getDependencyConstraints();
@@ -61,6 +58,7 @@ public interface ComponentVariant extends VariantResolveMetadata {
 
         @Nullable
         IvyArtifactName getDependencyArtifact();
+
     }
 
     interface DependencyConstraint {

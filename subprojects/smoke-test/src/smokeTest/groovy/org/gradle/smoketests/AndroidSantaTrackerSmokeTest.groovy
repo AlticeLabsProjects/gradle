@@ -16,9 +16,10 @@
 
 package org.gradle.smoketests
 
-import org.gradle.integtests.fixtures.UnsupportedWithInstantExecution
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
+import org.gradle.integtests.fixtures.UnsupportedWithConfigurationCache
+import org.gradle.profiler.DefaultScenarioContext
 import org.gradle.profiler.Phase
-import org.gradle.profiler.ScenarioContext
 import org.gradle.profiler.mutations.ApplyNonAbiChangeToJavaSourceFileMutator
 import org.gradle.util.GradleVersion
 import org.gradle.util.Requires
@@ -27,18 +28,17 @@ import spock.lang.Unroll
 
 import static org.gradle.testkit.runner.TaskOutcome.SUCCESS
 
-
 @Requires(TestPrecondition.JDK11_OR_EARLIER)
 class AndroidSantaTrackerSmokeTest extends AbstractAndroidSantaTrackerSmokeTest {
 
-    // TODO:instant-execution remove once fixed upstream
+    // TODO:configuration-cache remove once fixed upstream
     @Override
-    protected int maxInstantExecutionProblems() {
-        return 100
+    protected int maxConfigurationCacheProblems() {
+        return 150
     }
 
     @Unroll
-    @UnsupportedWithInstantExecution(iterationMatchers = [AGP_3_ITERATION_MATCHER, AGP_4_0_ITERATION_MATCHER])
+    @UnsupportedWithConfigurationCache(iterationMatchers = [AGP_3_ITERATION_MATCHER, AGP_4_0_ITERATION_MATCHER])
     def "check deprecation warnings produced by building Santa Tracker Java (agp=#agpVersion)"() {
 
         given:
@@ -58,20 +58,20 @@ class AndroidSantaTrackerSmokeTest extends AbstractAndroidSantaTrackerSmokeTest 
         } else {
             expectNoDeprecationWarnings(result)
         }
-        assertInstantExecutionStateStored()
+        assertConfigurationCacheStateStored()
 
         where:
         agpVersion << TESTED_AGP_VERSIONS
     }
 
     @Unroll
-    @UnsupportedWithInstantExecution(iterationMatchers = [AGP_3_ITERATION_MATCHER, AGP_4_0_ITERATION_MATCHER])
+    @UnsupportedWithConfigurationCache(iterationMatchers = [AGP_3_ITERATION_MATCHER, AGP_4_0_ITERATION_MATCHER])
     def "incremental Java compilation works for Santa Tracker Java (agp=#agpVersion)"() {
 
         given:
         def checkoutDir = temporaryFolder.createDir("checkout")
         setupCopyOfSantaTracker(checkoutDir, 'Java', agpVersion)
-        def buildContext = new ScenarioContext(UUID.randomUUID(), "nonAbiChange").withBuild(Phase.MEASURE, 0)
+        def buildContext = new DefaultScenarioContext(UUID.randomUUID(), "nonAbiChange").withBuild(Phase.MEASURE, 0)
 
         and:
         def pathToClass = "com/google/android/apps/santatracker/map/BottomSheetBehavior"
@@ -85,7 +85,7 @@ class AndroidSantaTrackerSmokeTest extends AbstractAndroidSantaTrackerSmokeTest 
 
         then:
         result.task(":santa-tracker:compileDevelopmentDebugJavaWithJavac").outcome == SUCCESS
-        assertInstantExecutionStateStored()
+        assertConfigurationCacheStateStored()
 
         when:
         nonAbiChangeMutator.beforeBuild(buildContext)
@@ -94,10 +94,38 @@ class AndroidSantaTrackerSmokeTest extends AbstractAndroidSantaTrackerSmokeTest 
 
         then:
         result.task(":santa-tracker:compileDevelopmentDebugJavaWithJavac").outcome == SUCCESS
-        assertInstantExecutionStateLoaded()
+        assertConfigurationCacheStateLoaded()
         md5After != md5Before
 
         where:
         agpVersion << TESTED_AGP_VERSIONS
+    }
+
+    @Unroll
+    @UnsupportedWithConfigurationCache(iterationMatchers = [AGP_3_ITERATION_MATCHER, AGP_4_0_ITERATION_MATCHER, AGP_4_1_ITERATION_MATCHER])
+    @ToBeFixedForConfigurationCache(iterationMatchers = AGP_4_2_ITERATION_MATCHER)
+    def "can lint Santa-Tracker #flavour (agp=#agpVersion)"() {
+
+        given:
+        def checkoutDir = temporaryFolder.createDir("checkout")
+        setupCopyOfSantaTracker(checkoutDir, flavour, agpVersion)
+
+        when:
+        def result = runnerForLocation(checkoutDir, agpVersion, "lintDebug").buildAndFail()
+
+        then:
+        assertConfigurationCacheStateStored()
+        result.output.contains("Lint found errors in the project; aborting build.")
+
+        when:
+        runnerForLocation(checkoutDir, agpVersion, "clean").build()
+        result = runnerForLocation(checkoutDir, agpVersion, "lintDebug").buildAndFail()
+
+        then:
+        assertConfigurationCacheStateLoaded()
+        result.output.contains("Lint found errors in the project; aborting build.")
+
+        where:
+        [agpVersion, flavour] << [TESTED_AGP_VERSIONS, ['Java', 'Kotlin']].combinations()
     }
 }

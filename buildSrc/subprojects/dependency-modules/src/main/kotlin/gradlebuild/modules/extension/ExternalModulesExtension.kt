@@ -21,7 +21,7 @@ import gradlebuild.modules.model.License
 abstract class ExternalModulesExtension {
 
     val groovyVersion = "2.5.12"
-    val kotlinVersion = "1.3.72"
+    val kotlinVersion = "1.4.10"
 
     fun futureKotlin(module: String) = "org.jetbrains.kotlin:kotlin-$module:$kotlinVersion"
 
@@ -101,6 +101,7 @@ abstract class ExternalModulesExtension {
     val maven3WagonProviderApi = "org.apache.maven.wagon:wagon-provider-api"
     val minlog = "com.esotericsoftware.minlog:minlog"
     val nativePlatform = "net.rubygrapefruit:native-platform"
+    val nativePlatformFileEvents = "net.rubygrapefruit:file-events"
     val nekohtml = "net.sourceforge.nekohtml:nekohtml"
     val objenesis = "org.objenesis:objenesis"
     val plexusCipher = "org.sonatype.plexus:plexus-cipher"
@@ -118,6 +119,7 @@ abstract class ExternalModulesExtension {
     val slf4jApi = "org.slf4j:slf4j-api"
     val snakeyaml = "org.yaml:snakeyaml"
     val testng = "org.testng:testng"
+    val tomlj = "org.tomlj:tomlj"
     val trove4j = "org.jetbrains.intellij.deps:trove4j"
     val xbeanReflect = "org.apache.xbean:xbean-reflect"
     val xerces = "xerces:xercesImpl"
@@ -135,7 +137,11 @@ abstract class ExternalModulesExtension {
     val guice = "com.google.inject:guice"
     val httpmime = "org.apache.httpcomponents:httpmime"
     val jacksonKotlin = "com.fasterxml.jackson.module:jackson-module-kotlin"
-    val jetty = "org.mortbay.jetty:jetty"
+    val javaParser = "com.github.javaparser:javaparser-core"
+    val joptSimple = "net.sf.jopt-simple:jopt-simple"
+    val jetty = "org.eclipse.jetty:jetty-http"
+    val jettySecurity = "org.eclipse.jetty:jetty-security"
+    val jettyWebApp = "org.eclipse.jetty:jetty-webapp"
     val jsoup = "org.jsoup:jsoup"
     val jtar = "org.kamranzafar:jtar"
     val kotlinCoroutines = "org.jetbrains.kotlinx:kotlinx-coroutines-core"
@@ -144,8 +150,10 @@ abstract class ExternalModulesExtension {
     val mina = "org.apache.mina:mina-core"
     val mockitoKotlin = "com.nhaarman:mockito-kotlin"
     val mockitoKotlin2 = "com.nhaarman.mockitokotlin2:mockito-kotlin"
+    val mySqlConnector = "mysql:mysql-connector-java"
     val sampleCheck = "org.gradle:sample-check"
     val snappy = "org.iq80.snappy:snappy"
+    val servletApi = "javax.servlet:javax.servlet-api"
     val spock = "org.spockframework:spock-core"
     val sshdCore = "org.apache.sshd:sshd-core"
     val sshdScp = "org.apache.sshd:sshd-scp"
@@ -247,6 +255,7 @@ abstract class ExternalModulesExtension {
         slf4jApi to License.MIT,
         snakeyaml to License.Apache2,
         testng to License.Apache2,
+        tomlj to License.Apache2,
         trove4j to License.LGPL21,
         xbeanReflect to License.Apache2,
         xerces to License.Apache2,

@@ -16,6 +16,7 @@
 
 package org.gradle.internal.execution.steps;
 
+import com.google.common.collect.ImmutableSortedMap;
 import org.gradle.internal.execution.IncrementalChangesContext;
 import org.gradle.internal.execution.InputChangesContext;
 import org.gradle.internal.execution.Result;
@@ -25,10 +26,13 @@ import org.gradle.internal.execution.history.AfterPreviousExecutionState;
 import org.gradle.internal.execution.history.BeforeExecutionState;
 import org.gradle.internal.execution.history.changes.ExecutionStateChanges;
 import org.gradle.internal.execution.history.changes.InputChangesInternal;
+import org.gradle.internal.fingerprint.CurrentFileCollectionFingerprint;
+import org.gradle.internal.snapshot.ValueSnapshot;
 import org.gradle.work.InputChanges;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.util.Optional;
 
 public class ResolveInputChangesStep<C extends IncrementalChangesContext> implements Step<C, Result> {
@@ -41,12 +45,11 @@ public class ResolveInputChangesStep<C extends IncrementalChangesContext> implem
     }
 
     @Override
-    public Result execute(C context) {
-        UnitOfWork work = context.getWork();
+    public Result execute(UnitOfWork work, C context) {
         Optional<InputChangesInternal> inputChanges = work.getInputChangeTrackingStrategy().requiresInputChanges()
             ? Optional.of(determineInputChanges(work, context))
             : Optional.empty();
-        return delegate.execute(new InputChangesContext() {
+        return delegate.execute(work, new InputChangesContext() {
             @Override
             public Optional<InputChangesInternal> getInputChanges() {
                 return inputChanges;
@@ -63,6 +66,26 @@ public class ResolveInputChangesStep<C extends IncrementalChangesContext> implem
             }
 
             @Override
+            public ImmutableSortedMap<String, ValueSnapshot> getInputProperties() {
+                return context.getInputProperties();
+            }
+
+            @Override
+            public ImmutableSortedMap<String, CurrentFileCollectionFingerprint> getInputFileProperties() {
+                return context.getInputFileProperties();
+            }
+
+            @Override
+            public UnitOfWork.Identity getIdentity() {
+                return context.getIdentity();
+            }
+
+            @Override
+            public File getWorkspace() {
+                return context.getWorkspace();
+            }
+
+            @Override
             public Optional<AfterPreviousExecutionState> getAfterPreviousExecutionState() {
                 return context.getAfterPreviousExecutionState();
             }
@@ -70,11 +93,6 @@ public class ResolveInputChangesStep<C extends IncrementalChangesContext> implem
             @Override
             public Optional<BeforeExecutionState> getBeforeExecutionState() {
                 return context.getBeforeExecutionState();
-            }
-
-            @Override
-            public UnitOfWork getWork() {
-                return work;
             }
         });
     }

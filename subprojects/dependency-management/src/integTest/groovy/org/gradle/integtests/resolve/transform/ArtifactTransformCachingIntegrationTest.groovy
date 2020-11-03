@@ -17,10 +17,9 @@
 package org.gradle.integtests.resolve.transform
 
 import org.gradle.api.internal.artifacts.ivyservice.CacheLayout
-import org.gradle.api.internal.artifacts.transform.DefaultTransformationWorkspace
 import org.gradle.cache.internal.LeastRecentlyUsedCacheCleanup
 import org.gradle.integtests.fixtures.AbstractHttpDependencyResolutionTest
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.integtests.fixtures.cache.FileAccessTimeJournalFixture
 import org.gradle.test.fixtures.file.TestFile
 import org.gradle.test.fixtures.server.http.BlockingHttpServer
@@ -242,6 +241,8 @@ class ArtifactTransformCachingIntegrationTest extends AbstractHttpDependencyReso
         output.count("> Transform lib2.jar (project :lib) with MakeGreenToRedThings") == 1
     }
 
+    // This shows current behaviour, where the transform is executed even though the input artifact has not been created yet
+    // This should become an error eventually
     def "executes transform immediately when required during task graph building"() {
         buildFile << declareAttributes() << withJarTasks() << """
             import org.gradle.api.artifacts.transform.TransformParameters
@@ -252,7 +253,9 @@ class ArtifactTransformCachingIntegrationTest extends AbstractHttpDependencyReso
 
                 @Override
                 void transform(TransformOutputs outputs) {
-                    outputs.file(inputArtifact.get().asFile.name + ".green").text = "very green"
+                    def file = inputArtifact.get().asFile
+                    println "Transforming \${file.name} with MakeGreen"
+                    outputs.file(file.name + ".green").text = "very green"
                 }
             }
 
@@ -288,9 +291,10 @@ class ArtifactTransformCachingIntegrationTest extends AbstractHttpDependencyReso
                     doLast { }
                 }
                 tasks.register("declareTransformAsInput").configure {
-                    inputs.files(configurations.green)
+                    def files = configurations.green
+                    inputs.files(files)
                     doLast {
-                        configurations.green.each { println it }
+                        files.each { println it }
                     }
                 }
 
@@ -305,10 +309,18 @@ class ArtifactTransformCachingIntegrationTest extends AbstractHttpDependencyReso
         """
 
         when:
-        run(":app:toBeFinalized", "withDependency", "--info")
+        run(":app:toBeFinalized", "withDependency")
+
         then:
-        output.count("Transforming lib1.jar (project :lib) with MakeGreen") == 2
-        output.count("Transforming lib2.jar (project :lib) with MakeGreen") == 2
+        output.count("Transforming lib1.jar with MakeGreen") == 1
+        output.count("Transforming lib2.jar with MakeGreen") == 1
+
+        when:
+        run(":app:toBeFinalized", "withDependency")
+
+        then:
+        output.count("Transforming lib1.jar with MakeGreen") == 1
+        output.count("Transforming lib2.jar with MakeGreen") == 1
     }
 
     def "each file is transformed once per set of configuration parameters"() {
@@ -1015,7 +1027,7 @@ class ArtifactTransformCachingIntegrationTest extends AbstractHttpDependencyReso
         failingTransform << (1..4)
     }
 
-    @ToBeFixedForInstantExecution(because = "resolves external dependency when writing cache entry, rather than when running consuming task, so exception chain is different")
+    @ToBeFixedForConfigurationCache(because = "resolves external dependency when writing cache entry, rather than when running consuming task, so exception chain is different")
     @Unroll
     def "failure in resolution propagates to chain (scheduled: #scheduled)"() {
         given:
@@ -1437,7 +1449,7 @@ class ArtifactTransformCachingIntegrationTest extends AbstractHttpDependencyReso
         when:
         run '--stop' // ensure daemon does not cache file access times in memory
         def beforeCleanup = MILLISECONDS.toSeconds(System.currentTimeMillis())
-        writeLastTransformationAccessTimeToJournal(outputDir1, daysAgo(MAX_CACHE_AGE_IN_DAYS + 1))
+        writeLastTransformationAccessTimeToJournal(outputDir1.parentFile, daysAgo(MAX_CACHE_AGE_IN_DAYS + 1))
         gcFile.lastModified = daysAgo(2)
 
         and:
@@ -1789,12 +1801,12 @@ ${getFileSizerBody(fileValue, 'outputs.dir(', 'outputs.file(')}
     }
 
     Set<TestFile> projectOutputDirs(String from, String to, Closure<String> stream = { output }) {
-        def parts = [Pattern.quote(temporaryFolder.getTestDirectory().absolutePath) + ".*", "build", ".transforms", "\\w+"]
+        def parts = [Pattern.quote(temporaryFolder.getTestDirectory().absolutePath) + ".*", "build", ".transforms", "\\w+", "transformed"]
         return outputDirs(from, to, parts.join(quotedFileSeparator), stream)
     }
 
     Set<TestFile> gradleUserHomeOutputDirs(String from, String to, Closure<String> stream = { output }) {
-        def parts = [Pattern.quote(cacheDir.file(CacheLayout.TRANSFORMS_STORE.getKey()).absolutePath), "\\w+"]
+        def parts = [Pattern.quote(cacheDir.absolutePath), "\\w+", "transformed"]
         outputDirs(from, to, parts.join(quotedFileSeparator), stream)
     }
 
@@ -1816,17 +1828,11 @@ ${getFileSizerBody(fileValue, 'outputs.dir(', 'outputs.file(')}
         return cacheDir.file("gc.properties")
     }
 
-    TestFile getCacheFilesDir() {
-        return cacheDir.file(CacheLayout.TRANSFORMS_STORE.getKey())
-    }
-
     TestFile getCacheDir() {
         return getUserHomeCacheDir().file(CacheLayout.TRANSFORMS.getKey())
     }
 
-    void writeLastTransformationAccessTimeToJournal(TestFile outputDir, long millis) {
-        def workspace = new DefaultTransformationWorkspace(outputDir)
-        writeLastFileAccessTimeToJournal(workspace.getOutputDirectory(), millis)
-        writeLastFileAccessTimeToJournal(workspace.getResultsFile(), millis)
+    void writeLastTransformationAccessTimeToJournal(TestFile workspaceDir, long millis) {
+        writeLastFileAccessTimeToJournal(workspaceDir, millis)
     }
 }

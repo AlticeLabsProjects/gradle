@@ -37,6 +37,7 @@ import org.gradle.internal.Describables;
 import org.gradle.internal.DisplayName;
 import org.gradle.internal.component.external.descriptor.Configuration;
 import org.gradle.internal.component.model.ComponentArtifactMetadata;
+import org.gradle.internal.component.model.ComponentConfigurationIdentifier;
 import org.gradle.internal.component.model.DefaultIvyArtifactName;
 import org.gradle.internal.component.model.ExcludeMetadata;
 import org.gradle.internal.component.model.IvyArtifactName;
@@ -61,6 +62,7 @@ public abstract class AbstractMutableModuleComponentResolveMetadata implements M
     private ModuleVersionIdentifier moduleVersionId;
     private boolean changing;
     private boolean missing;
+    private boolean externalVariant;
     private List<String> statusScheme = DEFAULT_STATUS_SCHEME;
     private MutableModuleSources moduleSources;
     private /*Mutable*/AttributeContainerInternal componentLevelAttributes;
@@ -100,6 +102,7 @@ public abstract class AbstractMutableModuleComponentResolveMetadata implements M
         this.componentLevelAttributes = attributesFactory.mutable(metadata.getAttributes());
         this.variantDerivationStrategy = metadata.getVariantDerivationStrategy();
         this.variantMetadataRules = new VariantMetadataRules(attributesFactory, moduleVersionId);
+        this.externalVariant = metadata.isExternalVariant();
     }
 
     private static AttributeContainerInternal defaultAttributes(ImmutableAttributesFactory attributesFactory) {
@@ -171,6 +174,16 @@ public abstract class AbstractMutableModuleComponentResolveMetadata implements M
     }
 
     @Override
+    public boolean isExternalVariant() {
+        return externalVariant;
+    }
+
+    @Override
+    public void setExternalVariant(boolean externalVariant) {
+        this.externalVariant = externalVariant;
+    }
+
+    @Override
     public MutableModuleSources getSources() {
         return moduleSources;
     }
@@ -231,7 +244,7 @@ public abstract class AbstractMutableModuleComponentResolveMetadata implements M
             builder.addAll(variants);
         }
         for (MutableComponentVariant variant : newVariants) {
-            builder.add(new ImmutableVariantImpl(getId(), variant.getName(), variant.getAttributes(), ImmutableList.copyOf(variant.getDependencies()), ImmutableList.copyOf(variant.getDependencyConstraints()), ImmutableList.copyOf(variant.getFiles()), ImmutableCapabilities.of(variant.getCapabilities())));
+            builder.add(new ImmutableVariantImpl(getId(), variant.getName(), variant.getAttributes(), ImmutableList.copyOf(variant.getDependencies()), ImmutableList.copyOf(variant.getDependencyConstraints()), ImmutableList.copyOf(variant.getFiles()), ImmutableCapabilities.of(variant.getCapabilities()), variant.isAvailableExternally()));
         }
         return builder.build();
     }
@@ -269,6 +282,7 @@ public abstract class AbstractMutableModuleComponentResolveMetadata implements M
         private final List<ComponentVariant.DependencyConstraint> dependencyConstraints = Lists.newArrayList();
         private final List<FileImpl> files = Lists.newArrayList();
         private final List<Capability> capabilities = Lists.newArrayList();
+        private boolean availableExternally;
 
         private ImmutableAttributes attributes;
 
@@ -349,7 +363,17 @@ public abstract class AbstractMutableModuleComponentResolveMetadata implements M
             copy.dependencyConstraints.addAll(this.dependencyConstraints);
             copy.files.addAll(this.files);
             copy.capabilities.add(capability);
+            copy.availableExternally = this.availableExternally;
             return copy;
+        }
+
+        @Override
+        public boolean isAvailableExternally() {
+            return availableExternally;
+        }
+
+        public void setAvailableExternally(boolean availableExternally) {
+            this.availableExternally = availableExternally;
         }
     }
 
@@ -403,7 +427,15 @@ public abstract class AbstractMutableModuleComponentResolveMetadata implements M
         private final boolean endorsing;
         private final IvyArtifactName dependencyArtifact;
 
-        DependencyImpl(String group, String module, VersionConstraint versionConstraint, List<ExcludeMetadata> excludes, String reason, ImmutableAttributes attributes, List<? extends Capability> requestedCapabilities, boolean endorsing, @Nullable IvyArtifactName dependencyArtifact) {
+        DependencyImpl(String group,
+                       String module,
+                       VersionConstraint versionConstraint,
+                       List<ExcludeMetadata> excludes,
+                       String reason,
+                       ImmutableAttributes attributes,
+                       List<? extends Capability> requestedCapabilities,
+                       boolean endorsing,
+                       @Nullable IvyArtifactName dependencyArtifact) {
             this.group = group;
             this.module = module;
             this.versionConstraint = versionConstraint;
@@ -411,7 +443,7 @@ public abstract class AbstractMutableModuleComponentResolveMetadata implements M
             this.reason = reason;
             this.attributes = attributes;
             this.requestedCapabilities = ImmutableList.copyOf(
-                    requestedCapabilities.stream()
+                requestedCapabilities.stream()
                     .map(c -> new ImmutableCapability(c.getGroup(), c.getName(), c.getVersion()))
                     .collect(Collectors.toList())
             );
@@ -561,8 +593,16 @@ public abstract class AbstractMutableModuleComponentResolveMetadata implements M
         private final ImmutableList<? extends DependencyConstraint> dependencyConstraints;
         private final ImmutableList<? extends File> files;
         private final ImmutableCapabilities capabilities;
+        private final boolean externalVariant;
 
-        ImmutableVariantImpl(ModuleComponentIdentifier componentId, String name, ImmutableAttributes attributes, ImmutableList<? extends Dependency> dependencies, ImmutableList<? extends DependencyConstraint> dependencyConstraints, ImmutableList<? extends File> files, ImmutableCapabilities capabilities) {
+        ImmutableVariantImpl(ModuleComponentIdentifier componentId,
+                             String name,
+                             ImmutableAttributes attributes,
+                             ImmutableList<? extends Dependency> dependencies,
+                             ImmutableList<? extends DependencyConstraint> dependencyConstraints,
+                             ImmutableList<? extends File> files,
+                             ImmutableCapabilities capabilities,
+                             boolean externalVariant) {
             this.componentId = componentId;
             this.name = name;
             this.attributes = attributes;
@@ -570,11 +610,17 @@ public abstract class AbstractMutableModuleComponentResolveMetadata implements M
             this.dependencyConstraints = dependencyConstraints;
             this.files = files;
             this.capabilities = capabilities;
+            this.externalVariant = externalVariant;
         }
 
         @Override
         public String getName() {
             return name;
+        }
+
+        @Override
+        public Identifier getIdentifier() {
+            return new ComponentConfigurationIdentifier(componentId, name);
         }
 
         @Override
@@ -617,6 +663,11 @@ public abstract class AbstractMutableModuleComponentResolveMetadata implements M
         }
 
         @Override
+        public boolean isExternalVariant() {
+            return externalVariant;
+        }
+
+        @Override
         public boolean equals(Object o) {
             if (this == o) {
                 return true;
@@ -631,7 +682,8 @@ public abstract class AbstractMutableModuleComponentResolveMetadata implements M
                 && Objects.equal(attributes, that.attributes)
                 && Objects.equal(dependencies, that.dependencies)
                 && Objects.equal(dependencyConstraints, that.dependencyConstraints)
-                && Objects.equal(files, that.files);
+                && Objects.equal(files, that.files)
+                && externalVariant == that.externalVariant;
         }
 
         @Override
@@ -641,7 +693,8 @@ public abstract class AbstractMutableModuleComponentResolveMetadata implements M
                 attributes,
                 dependencies,
                 dependencyConstraints,
-                files);
+                files,
+                externalVariant);
         }
     }
 

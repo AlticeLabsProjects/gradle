@@ -184,14 +184,14 @@ class NamedDomainObjectCollectionExtensionsTest {
         }
 
         container.named<DomainObject>("foo").configure {
-            it.foo = "reified access"
+            foo = "reified access"
         }
         container.named<DomainObject>("foo") {
             bar = "reified configuration"
         }
 
         container.named("bar", DomainObject::class).configure {
-            it.foo = "typed access"
+            foo = "typed access"
         }
         container.named("bar", DomainObject::class) {
             bar = "typed configuration"
@@ -222,11 +222,13 @@ class NamedDomainObjectCollectionExtensionsTest {
 
         assertThat(
             domainObject.foo, // just to prove domainObject's type is inferred correctly
-            nullValue())
+            nullValue()
+        )
 
         assertThat(
             domainObject,
-            sameInstance(element))
+            sameInstance(element)
+        )
 
         inOrder(container, provider) {
             verify(provider, times(2)).get()
@@ -568,7 +570,7 @@ class NamedDomainObjectCollectionExtensionsTest {
 
 
 internal
-fun <T> KStubbing<NamedDomainObjectContainer<T>>.onCreateWithAction(name: String, domainObject: T) {
+fun <T : Any> KStubbing<NamedDomainObjectContainer<T>>.onCreateWithAction(name: String, domainObject: T) {
     on { create(eq(name), any<Action<T>>()) } doAnswer {
         it.getArgument<Action<T>>(1).execute(domainObject)
         domainObject
@@ -577,7 +579,7 @@ fun <T> KStubbing<NamedDomainObjectContainer<T>>.onCreateWithAction(name: String
 
 
 internal
-fun <T> KStubbing<NamedDomainObjectContainer<T>>.onRegisterWithAction(name: String, provider: NamedDomainObjectProvider<T>) {
+fun <T : Any> KStubbing<NamedDomainObjectContainer<T>>.onRegisterWithAction(name: String, provider: NamedDomainObjectProvider<T>) {
     on { register(eq(name), any<Action<T>>()) } doAnswer {
         it.getArgument<Action<T>>(1).execute(provider.get())
         provider

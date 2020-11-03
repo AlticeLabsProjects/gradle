@@ -17,12 +17,22 @@
 package org.gradle.test.fixtures.server.http
 
 import com.google.common.base.Preconditions
+import org.eclipse.jetty.servlet.FilterHolder
+import org.eclipse.jetty.webapp.WebAppContext
 import org.gradle.test.fixtures.file.TestDirectoryProvider
 import org.gradle.test.fixtures.file.TestFile
 import org.junit.rules.ExternalResource
-import org.mortbay.jetty.servlet.FilterHolder
-import org.mortbay.jetty.webapp.WebAppContext
-import org.mortbay.servlet.RestFilter
+
+import javax.servlet.DispatcherType
+
+import javax.servlet.Filter
+import javax.servlet.FilterChain
+import javax.servlet.FilterConfig
+import javax.servlet.ServletException
+import javax.servlet.ServletRequest
+import javax.servlet.ServletResponse
+import javax.servlet.http.HttpServletRequest
+import javax.servlet.http.HttpServletResponse
 
 class HttpBuildCacheServer extends ExternalResource implements HttpServerFixture {
     private final TestDirectoryProvider provider
@@ -34,6 +44,9 @@ class HttpBuildCacheServer extends ExternalResource implements HttpServerFixture
     HttpBuildCacheServer(TestDirectoryProvider provider) {
         this.provider = provider
         this.webapp = new WebAppContext()
+        // The following code is because of a problem under Windows: the file descriptors are kept open under JDK 11
+        // even after server shutdown, which prevents from deleting the test directory
+        this.webapp.setInitParameter("org.eclipse.jetty.servlet.Default.useFileMappedBuffer", "false");
     }
 
     TestFile getCacheDir() {
@@ -47,16 +60,45 @@ class HttpBuildCacheServer extends ExternalResource implements HttpServerFixture
 
     private void addFilters() {
         if (dropConnectionForPutBytes > -1) {
-            this.webapp.addFilter(new FilterHolder(new DropConnectionFilter(dropConnectionForPutBytes, this)), "/*", 1)
+            this.webapp.addFilter(new FilterHolder(new DropConnectionFilter(dropConnectionForPutBytes, this)), "/*", EnumSet.of(DispatcherType.REQUEST))
         }
         if (blockIncomingConnectionsForSeconds > 0) {
-            this.webapp.addFilter(new FilterHolder(new BlockFilter(blockIncomingConnectionsForSeconds)), "/*", 1)
+            this.webapp.addFilter(new FilterHolder(new BlockFilter(blockIncomingConnectionsForSeconds)), "/*", EnumSet.of(DispatcherType.REQUEST))
         }
-        this.webapp.addFilter(RestFilter, "/*", 1)
+        // TODO: Find Jetty 9 idiomatic way to get rid of this filter
+        this.webapp.addFilter(RestFilter, "/*", EnumSet.of(DispatcherType.REQUEST))
     }
 
     void dropConnectionForPutAfterBytes(long numBytes) {
         this.dropConnectionForPutBytes = numBytes
+    }
+
+    interface Responder {
+        boolean respond(HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException
+    }
+
+    HttpBuildCacheServer addResponder(Responder responder) {
+        def filter = new Filter() {
+            @Override
+            void init(FilterConfig filterConfig) throws ServletException {
+
+            }
+
+            @Override
+            void doFilter(ServletRequest request, ServletResponse response, FilterChain chain) throws IOException, ServletException {
+                if (responder.respond(request as HttpServletRequest, response as HttpServletResponse)) {
+                    chain.doFilter(request, response)
+                }
+            }
+
+            @Override
+            void destroy() {
+
+            }
+        }
+
+        webapp.addFilter(new FilterHolder(filter), "/*", EnumSet.of(DispatcherType.REQUEST))
+        this
     }
 
     @Override

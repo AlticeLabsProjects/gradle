@@ -16,16 +16,21 @@
 
 package org.gradle.internal.execution.steps;
 
+import com.google.common.collect.ImmutableSortedMap;
 import org.gradle.internal.execution.AfterPreviousExecutionContext;
-import org.gradle.internal.execution.ExecutionRequestContext;
 import org.gradle.internal.execution.Result;
 import org.gradle.internal.execution.Step;
 import org.gradle.internal.execution.UnitOfWork;
+import org.gradle.internal.execution.UnitOfWork.Identity;
+import org.gradle.internal.execution.WorkspaceContext;
 import org.gradle.internal.execution.history.AfterPreviousExecutionState;
+import org.gradle.internal.fingerprint.CurrentFileCollectionFingerprint;
+import org.gradle.internal.snapshot.ValueSnapshot;
 
+import java.io.File;
 import java.util.Optional;
 
-public class LoadExecutionStateStep<C extends ExecutionRequestContext, R extends Result> implements Step<C, R> {
+public class LoadExecutionStateStep<C extends WorkspaceContext, R extends Result> implements Step<C, R> {
     private final Step<? super AfterPreviousExecutionContext, ? extends R> delegate;
 
     public LoadExecutionStateStep(Step<? super AfterPreviousExecutionContext, ? extends R> delegate) {
@@ -33,11 +38,11 @@ public class LoadExecutionStateStep<C extends ExecutionRequestContext, R extends
     }
 
     @Override
-    public R execute(C context) {
-        UnitOfWork work = context.getWork();
-        Optional<AfterPreviousExecutionState> afterPreviousExecutionState = work.getExecutionHistoryStore()
-            .flatMap(executionHistoryStore -> executionHistoryStore.load(work.getIdentity()));
-        return delegate.execute(new AfterPreviousExecutionContext() {
+    public R execute(UnitOfWork work, C context) {
+        Identity identity = context.getIdentity();
+        Optional<AfterPreviousExecutionState> afterPreviousExecutionState = work.getHistory()
+            .flatMap(history -> history.load(identity.getUniqueId()));
+        return delegate.execute(work, new AfterPreviousExecutionContext() {
             @Override
             public Optional<AfterPreviousExecutionState> getAfterPreviousExecutionState() {
                 return afterPreviousExecutionState;
@@ -49,8 +54,23 @@ public class LoadExecutionStateStep<C extends ExecutionRequestContext, R extends
             }
 
             @Override
-            public UnitOfWork getWork() {
-                return work;
+            public ImmutableSortedMap<String, ValueSnapshot> getInputProperties() {
+                return context.getInputProperties();
+            }
+
+            @Override
+            public ImmutableSortedMap<String, CurrentFileCollectionFingerprint> getInputFileProperties() {
+                return context.getInputFileProperties();
+            }
+
+            @Override
+            public Identity getIdentity() {
+                return context.getIdentity();
+            }
+
+            @Override
+            public File getWorkspace() {
+                return context.getWorkspace();
             }
         });
     }

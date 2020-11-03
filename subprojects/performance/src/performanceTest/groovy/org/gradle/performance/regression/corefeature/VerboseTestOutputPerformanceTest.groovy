@@ -16,29 +16,28 @@
 
 package org.gradle.performance.regression.corefeature
 
-import org.gradle.performance.AbstractCrossVersionGradleProfilerPerformanceTest
-import spock.lang.Unroll
+import org.gradle.performance.AbstractCrossVersionPerformanceTest
+import org.gradle.performance.annotations.RunFor
+import org.gradle.performance.annotations.Scenario
 
-class VerboseTestOutputPerformanceTest extends AbstractCrossVersionGradleProfilerPerformanceTest {
+import static org.gradle.performance.annotations.ScenarioType.TEST
+import static org.gradle.performance.results.OperatingSystem.LINUX
 
-    @Unroll
-    def "cleanTest test on #testProject with verbose test output"() {
+@RunFor(
+    @Scenario(type = TEST, operatingSystems = [LINUX], testProjects = ["withVerboseTestNG", "withVerboseJUnit"])
+)
+class VerboseTestOutputPerformanceTest extends AbstractCrossVersionPerformanceTest {
+
+    def "cleanTest test with verbose test output"() {
         given:
-        runner.testProject = testProject
         runner.tasksToRun = ['cleanTest', 'test']
         runner.args = ['-q']
-        runner.gradleOpts = ["-Xms256m", "-Xmx256m"]
-        runner.targetVersions = ["6.7-20200723220251+0000"]
+        runner.targetVersions = ["6.8-20201028230040+0000"]
 
         when:
         def result = runner.run()
 
         then:
         result.assertCurrentVersionHasNotRegressed()
-
-        where:
-        testProject         | _
-        "withVerboseTestNG" | _
-        "withVerboseJUnit"  | _
     }
 }

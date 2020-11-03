@@ -40,8 +40,9 @@ class IncrementalCompileProcessorTest extends Specification {
     def includesParser = Mock(SourceIncludesParser)
     def dependencyResolver = new DummyResolver()
     def virtualFileSystem = TestFiles.virtualFileSystem()
+    def fileSystemAccess = TestFiles.fileSystemAccess(virtualFileSystem)
     def stateCache = new DummyPersistentStateCache()
-    def incrementalCompileProcessor = new IncrementalCompileProcessor(stateCache, new IncrementalCompileFilesFactory(IncludeDirectives.EMPTY, includesParser, dependencyResolver, virtualFileSystem), new TestBuildOperationExecutor())
+    def incrementalCompileProcessor = new IncrementalCompileProcessor(stateCache, new IncrementalCompileFilesFactory(IncludeDirectives.EMPTY, includesParser, dependencyResolver, fileSystemAccess), new TestBuildOperationExecutor())
 
     def source1 = sourceFile("source1")
     def source2 = sourceFile("source2")
@@ -516,8 +517,8 @@ class IncrementalCompileProcessorTest extends Specification {
     }
 
     private HashCode getContentHash(File file) {
-        virtualFileSystem.update([file.absolutePath], {})
-        return virtualFileSystem.readRegularFileContentHash(file.getAbsolutePath(), { it })
+        fileSystemAccess.write([file.absolutePath], {})
+        return fileSystemAccess.readRegularFileContentHash(file.getAbsolutePath(), { it })
             .orElse(new MissingFileSnapshot(file.getAbsolutePath(), file.getName(), AccessType.DIRECT).hash)
     }
 }

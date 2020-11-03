@@ -21,7 +21,7 @@ import org.gradle.caching.internal.origin.OriginMetadata;
 import org.gradle.internal.Try;
 import org.gradle.internal.execution.BeforeExecutionContext;
 import org.gradle.internal.execution.CurrentSnapshotResult;
-import org.gradle.internal.execution.ExecutionOutcome;
+import org.gradle.internal.execution.OutputSnapshotter;
 import org.gradle.internal.execution.Result;
 import org.gradle.internal.execution.Step;
 import org.gradle.internal.execution.UnitOfWork;
@@ -29,41 +29,52 @@ import org.gradle.internal.execution.history.AfterPreviousExecutionState;
 import org.gradle.internal.execution.history.BeforeExecutionState;
 import org.gradle.internal.fingerprint.CurrentFileCollectionFingerprint;
 import org.gradle.internal.fingerprint.FileCollectionFingerprint;
+import org.gradle.internal.fingerprint.impl.DefaultCurrentFileCollectionFingerprint;
 import org.gradle.internal.id.UniqueId;
 import org.gradle.internal.operations.BuildOperationDescriptor;
 import org.gradle.internal.operations.BuildOperationExecutor;
 import org.gradle.internal.operations.BuildOperationType;
 import org.gradle.internal.snapshot.FileSystemSnapshot;
 
+import java.util.Collections;
+
+import static com.google.common.collect.ImmutableSortedMap.copyOfSorted;
+import static com.google.common.collect.Maps.transformEntries;
+import static org.gradle.internal.execution.impl.OutputFilterUtil.filterOutputSnapshotAfterExecution;
+import static org.gradle.internal.fingerprint.impl.AbsolutePathFingerprintingStrategy.IGNORE_MISSING;
+
 public class SnapshotOutputsStep<C extends BeforeExecutionContext> extends BuildOperationStep<C, CurrentSnapshotResult> {
     private final UniqueId buildInvocationScopeId;
+    private final OutputSnapshotter outputSnapshotter;
     private final Step<? super C, ? extends Result> delegate;
 
     public SnapshotOutputsStep(
         BuildOperationExecutor buildOperationExecutor,
         UniqueId buildInvocationScopeId,
+        OutputSnapshotter outputSnapshotter,
         Step<? super C, ? extends Result> delegate
     ) {
         super(buildOperationExecutor);
         this.buildInvocationScopeId = buildInvocationScopeId;
+        this.outputSnapshotter = outputSnapshotter;
         this.delegate = delegate;
     }
 
     @Override
-    public CurrentSnapshotResult execute(C context) {
-        Result result = delegate.execute(context);
+    public CurrentSnapshotResult execute(UnitOfWork work, C context) {
+        Result result = delegate.execute(work, context);
         ImmutableSortedMap<String, CurrentFileCollectionFingerprint> finalOutputs = operation(
             operationContext -> {
-                ImmutableSortedMap<String, CurrentFileCollectionFingerprint> outputSnapshots = captureOutputs(context);
+                ImmutableSortedMap<String, CurrentFileCollectionFingerprint> outputSnapshots = captureOutputs(work, context);
                 operationContext.setResult(Operation.Result.INSTANCE);
                 return outputSnapshots;
             },
             BuildOperationDescriptor
-                .displayName("Snapshot outputs after executing " + context.getWork().getDisplayName())
+                .displayName("Snapshot outputs after executing " + work.getDisplayName())
                 .details(Operation.Details.INSTANCE)
         );
 
-        OriginMetadata originMetadata = new OriginMetadata(buildInvocationScopeId.asString(), context.getWork().markExecutionTime());
+        OriginMetadata originMetadata = new OriginMetadata(buildInvocationScopeId.asString(), work.markExecutionTime());
 
         return new CurrentSnapshotResult() {
             @Override
@@ -77,8 +88,8 @@ public class SnapshotOutputsStep<C extends BeforeExecutionContext> extends Build
             }
 
             @Override
-            public Try<ExecutionOutcome> getOutcome() {
-                return result.getOutcome();
+            public Try<ExecutionResult> getExecutionResult() {
+                return result.getExecutionResult();
             }
 
             @Override
@@ -88,10 +99,8 @@ public class SnapshotOutputsStep<C extends BeforeExecutionContext> extends Build
         };
     }
 
-    private static ImmutableSortedMap<String, CurrentFileCollectionFingerprint> captureOutputs(BeforeExecutionContext context) {
-        UnitOfWork work = context.getWork();
-
-        ImmutableSortedMap<String, FileCollectionFingerprint> afterPreviousExecutionStateOutputFingerprints = context.getAfterPreviousExecutionState()
+    private ImmutableSortedMap<String, CurrentFileCollectionFingerprint> captureOutputs(UnitOfWork work, BeforeExecutionContext context) {
+        ImmutableSortedMap<String, FileCollectionFingerprint> afterPreviousExecutionOutputFingerprints = context.getAfterPreviousExecutionState()
             .map(AfterPreviousExecutionState::getOutputFileProperties)
             .orElse(ImmutableSortedMap.of());
 
@@ -103,14 +112,25 @@ public class SnapshotOutputsStep<C extends BeforeExecutionContext> extends Build
             .flatMap(BeforeExecutionState::getDetectedOverlappingOutputs)
             .isPresent();
 
-        ImmutableSortedMap<String, FileSystemSnapshot> afterExecutionOutputSnapshots = work.snapshotOutputsAfterExecution();
+        ImmutableSortedMap<String, FileSystemSnapshot> afterExecutionOutputSnapshots = outputSnapshotter.snapshotOutputs(work, context.getWorkspace());
 
-        return work.fingerprintAndFilterOutputSnapshots(
-            afterPreviousExecutionStateOutputFingerprints,
-            beforeExecutionOutputSnapshots,
+        return copyOfSorted(transformEntries(
             afterExecutionOutputSnapshots,
-            hasDetectedOverlappingOutputs
-        );
+            (propertyName, afterExecutionOutputSnapshot) -> {
+                // This can never be null as it comes from an ImmutableMap's value
+                assert afterExecutionOutputSnapshot != null;
+
+                Iterable<FileSystemSnapshot> filteredSnapshots;
+                if (hasDetectedOverlappingOutputs) {
+                    FileCollectionFingerprint afterLastExecutionFingerprint = afterPreviousExecutionOutputFingerprints.get(propertyName);
+                    FileSystemSnapshot beforeExecutionOutputSnapshot = beforeExecutionOutputSnapshots.get(propertyName);
+                    filteredSnapshots = filterOutputSnapshotAfterExecution(afterLastExecutionFingerprint, beforeExecutionOutputSnapshot, afterExecutionOutputSnapshot);
+                } else {
+                    filteredSnapshots = Collections.singleton(afterExecutionOutputSnapshot);
+                }
+                return DefaultCurrentFileCollectionFingerprint.from(filteredSnapshots, IGNORE_MISSING);
+            }
+        ));
     }
 
     /*

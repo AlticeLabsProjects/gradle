@@ -16,30 +16,49 @@
 
 package org.gradle.internal.execution.steps
 
+import org.gradle.api.file.FileCollection
 import org.gradle.internal.execution.OutputChangeListener
 import org.gradle.internal.execution.Result
+import org.gradle.internal.execution.UnitOfWork
+import org.gradle.internal.execution.WorkspaceContext
+import org.gradle.internal.file.TreeType
 
-class BroadcastChangingOutputsStepTest extends ContextInsensitiveStepSpec {
+class BroadcastChangingOutputsStepTest extends StepSpec<WorkspaceContext> {
     def outputChangeListener = Mock(OutputChangeListener)
     def step = new BroadcastChangingOutputsStep<>(outputChangeListener, delegate)
     def delegateResult = Mock(Result)
 
+    @Override
+    protected WorkspaceContext createContext() {
+        return Stub(WorkspaceContext)
+    }
+
     def "notifies listener about specific outputs changing"() {
-        def changingOutputs = ["output.txt"]
+        def outputDir = file("output-dir")
+        def localStateDir = file("local-state-dir")
+        def destroyableDir = file("destroyable-dir")
 
         when:
-        def result = step.execute(context)
+        def result = step.execute(work, context)
 
         then:
         result == delegateResult
 
-        _ * work.changingOutputs >> changingOutputs
+        _ * work.visitOutputs(_ as File, _ as UnitOfWork.OutputVisitor) >> { File workspace, UnitOfWork.OutputVisitor visitor ->
+            visitor.visitOutputProperty("output", TreeType.DIRECTORY, outputDir, Mock(FileCollection))
+            visitor.visitDestroyable(destroyableDir)
+            visitor.visitLocalState(localStateDir)
+        }
 
         then:
-        1 * outputChangeListener.beforeOutputChange(changingOutputs)
+        1 * outputChangeListener.beforeOutputChange([
+            outputDir.absolutePath,
+            destroyableDir.absolutePath,
+            localStateDir.absolutePath
+        ])
 
         then:
-        1 * delegate.execute(context) >> delegateResult
+        1 * delegate.execute(work, context) >> delegateResult
         0 * _
     }
 }

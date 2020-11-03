@@ -15,7 +15,7 @@
 [[more_about_tasks]]
 = Authoring Tasks
 
-In the <<tutorial_using_tasks.adoc#tutorial_using_tasks,introductory tutorial>> you learned how to create simple tasks. You also learned how to add additional behavior to these tasks later on, and you learned how to create dependencies between tasks. This was all about simple tasks, but Gradle takes the concept of tasks further. Gradle supports _enhanced tasks_, which are tasks that have their own properties and methods. This is really different from what you are used to with Ant targets. Such enhanced tasks are either provided by you or built into Gradle.
+In the <<tutorial_using_tasks.adoc#tutorial_using_tasks,introductory tutorial>> you learned how to create simple tasks. You also learned how to add additional behavior to these tasks later on, and you learned how to create dependencies between tasks. This was all about simple tasks, but Gradle takes the concept of tasks further. Gradle supports tasks that have their own properties and methods. Such tasks are either provided by you or built into Gradle.
 
 
 [[sec:task_outcomes]]
@@ -114,8 +114,8 @@ You can access tasks from any project using the task's path using the `tasks.get
 
 .Accessing tasks by path
 ====
-include::sample[dir="snippets/tasks/accessUsingPath/groovy",files="build.gradle[]"]
-include::sample[dir="snippets/tasks/accessUsingPath/kotlin",files="build.gradle.kts[]"]
+include::sample[dir="snippets/tasks/accessUsingPath/groovy",files="project-a/build.gradle[];build.gradle[]"]
+include::sample[dir="snippets/tasks/accessUsingPath/kotlin",files="project-a/build.gradle.kts[];build.gradle.kts[]"]
 
 .Output of **`gradle -q hello`**
 ----
@@ -223,7 +223,7 @@ If you attempt to pass a `null` value, Gradle will throw a `NullPointerException
 [[sec:adding_dependencies_to_tasks]]
 == Adding dependencies to a task
 
-There are several ways you can define the dependencies of a task. In <<tutorial_using_tasks.adoc#sec:task_dependencies,Task dependencies>> you were introduced to defining dependencies using task names. Task names can refer to tasks in the same project as the task, or to tasks in other projects. To refer to a task in another project, you prefix the name of the task with the path of the project it belongs to. The following is an example which adds a dependency from `projectA:taskX` to `projectB:taskY`:
+There are several ways you can define the dependencies of a task. In <<tutorial_using_tasks.adoc#sec:task_dependencies,Task dependencies>> you were introduced to defining dependencies using task names. Task names can refer to tasks in the same project as the task, or to tasks in other projects. To refer to a task in another project, you prefix the name of the task with the path of the project it belongs to. The following is an example which adds a dependency from `project-a:taskX` to `project-b:taskY`:
 
 .Adding dependency on task from another project
 ====
@@ -1140,6 +1140,8 @@ For up to date checks and the <<build_cache.adoc#build_cache,build cache>> Gradl
 In order to do so, Gradle first normalizes both inputs and then compares the result.
 For example, for a compile classpath, Gradle extracts the ABI signature from the classes on the classpath and then compares signatures between the last Gradle run and the current Gradle run as described in <<java_plugin.adoc#sec:java_compile_avoidance,Java compile avoidance>>.
 
+Normalization applies to all zip files on the classpath (e.g. jars, wars, aars, apks, etc).  This allows Gradle to recognize when two zip files are functionally the same, even though the zip files themselves might be slightly different due to metadata (such as timestamps or file order).  Normalization applies not only to zip files directly on the classpath, but also to zip files nested inside directories or inside other zip files on the classpath.
+
 It is possible to customize Gradle's built-in strategy for runtime classpath normalization.
 All inputs annotated with `@link:{javadocPath}/org/gradle/api/tasks/Classpath.html[Classpath]` are considered to be runtime classpaths.
 
@@ -1155,17 +1157,47 @@ include::sample[dir="snippets/tasks/inputNormalization/groovy",files="build.grad
 include::sample[dir="snippets/tasks/inputNormalization/kotlin",files="build.gradle.kts[tags=ignore-build-info-properties]"]
 ====
 
-If adding such a file to your jar files is something you do for all of the projects in your build, and you want to filter this file for all consumers, you may wrap the configurations described above in an `allprojects {}` or `subprojects {}` block in the root build script.
+If adding such a file to your jar files is something you do for all of the projects in your build, and you want to filter this file for all consumers,
+you should consider configuring such normalization in a <<sharing_build_logic_between_subprojects#sec:convention_plugins,convention plugin>> to share it between subprojects.
 
 The effect of this configuration would be that changes to `build-info.properties` would be ignored for up-to-date checks and <<build_cache.adoc#build_cache,build cache>> key calculations.
 Note that this will not change the runtime behavior of the `test` task — i.e. any test is still able to load `build-info.properties` and the runtime classpath is still the same as before.
+
+[[sec:property_file_normalization]]
+===== Properties file normalization
+
+By default, properties files (i.e. files that end in a `.properties` extension) will be normalized to ignore differences in comments, whitespace and the order of properties.
+Gradle does this by loading the properties files and only considering the individual properties during up-to-date checks or build cache key calculations.
+
+It is sometimes the case, though, that certain properties have a runtime impact, while others do not.
+If a property is changing that does not have an impact on the runtime classpath, it may be desirable to exclude it from up-to-date checks and <<build_cache.adoc#build_cache,build cache>> key calculations.
+However, excluding the entire file would also exclude the properties that do have a runtime impact.
+In this case, properties can be excluded selectively from any or all properties files on the runtime classpath.
+
+A rule for ignoring properties can be applied to a specific set of files using the patterns described in link:{groovyDslPath}/org.gradle.normalization.RuntimeClasspathNormalization.html[RuntimeClasspathNormalization].
+In the event that a file matches a rule, but cannot be loaded as a properties file (e.g. because it is not formatted properly or uses a non-standard encoding), it will be incorporated into the up-to-date or build cache key calculation as a normal file.
+In other words, if the file cannot be loaded as a properties file, any changes to whitespace, property order, or comments may cause the task to become out-of-date or cause a cache miss.
+
+.Ignore a property in selected properties files
+====
+include::sample[dir="snippets/tasks/inputNormalizationPropertiesFiles/groovy",files="build.gradle[tags=ignore-property-selected]"]
+include::sample[dir="snippets/tasks/inputNormalizationPropertiesFiles/kotlin",files="build.gradle.kts[tags=ignore-property-selected]"]
+====
+
+.Ignore a property in all properties files
+====
+include::sample[dir="snippets/tasks/inputNormalizationPropertiesFiles/groovy",files="build.gradle[tags=ignore-property-all]"]
+include::sample[dir="snippets/tasks/inputNormalizationPropertiesFiles/kotlin",files="build.gradle.kts[tags=ignore-property-all]"]
+====
 
 [[sec:meta_inf_normalization]]
 ===== Java `META-INF` normalization
 
 For files in the `META-INF` directory of jar archives it's not always possible to ignore files completely due to their runtime impact.
 
-Manifests and properties files within `META-INF` are normalized to ignore comments, whitespace and order differences. Manifest attribute names are compared case-and-order insensitively. Properties file keys are order insensitive.
+Manifest files within `META-INF` are normalized to ignore comments, whitespace and order differences.
+Manifest attribute names are compared case-and-order insensitively.
+Manifest properties files are normalized according to <<more_about_tasks.adoc#sec:property_file_normalization,Properties File Normalization>>.
 
 .Ignore `META-INF` manifest attributes
 ====

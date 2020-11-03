@@ -19,6 +19,7 @@ import org.gradle.StartParameter;
 import org.gradle.api.Action;
 import org.gradle.api.UnknownProjectException;
 import org.gradle.api.initialization.ConfigurableIncludedBuild;
+import org.gradle.api.initialization.resolve.DependencyResolutionManagement;
 import org.gradle.api.initialization.ProjectDescriptor;
 import org.gradle.api.initialization.Settings;
 import org.gradle.api.initialization.dsl.ScriptHandler;
@@ -33,12 +34,14 @@ import org.gradle.api.internal.plugins.DefaultObjectConfigurationAction;
 import org.gradle.api.internal.plugins.PluginManagerInternal;
 import org.gradle.api.internal.project.AbstractPluginAware;
 import org.gradle.api.internal.project.ProjectRegistry;
+import org.gradle.api.provider.ProviderFactory;
 import org.gradle.caching.configuration.BuildCacheConfiguration;
 import org.gradle.caching.configuration.internal.BuildCacheConfigurationInternal;
 import org.gradle.configuration.ScriptPluginFactory;
 import org.gradle.groovy.scripts.ScriptSource;
 import org.gradle.internal.Actions;
 import org.gradle.internal.deprecation.DeprecationLogger;
+import org.gradle.internal.management.DependencyResolutionManagementInternal;
 import org.gradle.internal.resource.TextUriResourceLoader;
 import org.gradle.internal.service.ServiceRegistry;
 import org.gradle.internal.service.scopes.ServiceRegistryFactory;
@@ -69,10 +72,16 @@ public abstract class DefaultSettings extends AbstractPluginAware implements Set
     private final ServiceRegistry services;
 
     private final List<IncludedBuildSpec> includedBuildSpecs = new ArrayList<IncludedBuildSpec>();
+    private final DependencyResolutionManagementInternal dependencyResolutionManagement;
 
-    public DefaultSettings(ServiceRegistryFactory serviceRegistryFactory, GradleInternal gradle,
-                           ClassLoaderScope classLoaderScope, ClassLoaderScope baseClassLoaderScope, ScriptHandler settingsScriptHandler,
-                           File settingsDir, ScriptSource settingsScript, StartParameter startParameter) {
+    public DefaultSettings(ServiceRegistryFactory serviceRegistryFactory,
+                           GradleInternal gradle,
+                           ClassLoaderScope classLoaderScope,
+                           ClassLoaderScope baseClassLoaderScope,
+                           ScriptHandler settingsScriptHandler,
+                           File settingsDir,
+                           ScriptSource settingsScript,
+                           StartParameter startParameter) {
         this.gradle = gradle;
         this.classLoaderScope = classLoaderScope;
         this.baseClassLoaderScope = baseClassLoaderScope;
@@ -80,8 +89,15 @@ public abstract class DefaultSettings extends AbstractPluginAware implements Set
         this.settingsDir = settingsDir;
         this.settingsScript = settingsScript;
         this.startParameter = startParameter;
-        services = serviceRegistryFactory.createFor(this);
-        rootProjectDescriptor = createProjectDescriptor(null, settingsDir.getName(), settingsDir);
+        this.services = serviceRegistryFactory.createFor(this);
+        this.rootProjectDescriptor = createProjectDescriptor(null, settingsDir.getName(), settingsDir);
+        this.dependencyResolutionManagement = createDependencyResolutionManagement();
+    }
+
+    private DependencyResolutionManagementInternal createDependencyResolutionManagement() {
+        DependencyResolutionManagementInternal drm = services.get(DependencyResolutionManagementInternal.class);
+        drm.setPluginsSpec(getPluginManagement());
+        return drm;
     }
 
     @Override
@@ -225,6 +241,13 @@ public abstract class DefaultSettings extends AbstractPluginAware implements Set
         this.settingsScript = settingsScript;
     }
 
+    @Override
+    @Inject
+    public ProviderFactory getProviders() {
+        // Decoration takes care of the implementation
+        throw new UnsupportedOperationException();
+    }
+
     @Inject
     public ProjectDescriptorRegistry getProjectDescriptorRegistry() {
         throw new UnsupportedOperationException();
@@ -349,5 +372,15 @@ public abstract class DefaultSettings extends AbstractPluginAware implements Set
                 .withUserManual("feature_lifecycle", "feature_preview")
                 .nagUser();
         }
+    }
+
+    @Override
+    public void dependencyResolutionManagement(Action<? super DependencyResolutionManagement> dependencyResolutionConfiguration) {
+        dependencyResolutionConfiguration.execute(dependencyResolutionManagement);
+    }
+
+    @Override
+    public void preventFromFurtherMutation() {
+        dependencyResolutionManagement.preventFromFurtherMutation();
     }
 }

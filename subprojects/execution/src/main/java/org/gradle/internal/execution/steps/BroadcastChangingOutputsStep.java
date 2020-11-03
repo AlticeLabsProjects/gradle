@@ -16,13 +16,18 @@
 
 package org.gradle.internal.execution.steps;
 
-import org.gradle.internal.execution.Context;
+import com.google.common.collect.ImmutableList;
+import org.gradle.api.file.FileCollection;
 import org.gradle.internal.execution.OutputChangeListener;
 import org.gradle.internal.execution.Result;
 import org.gradle.internal.execution.Step;
 import org.gradle.internal.execution.UnitOfWork;
+import org.gradle.internal.execution.WorkspaceContext;
+import org.gradle.internal.file.TreeType;
 
-public class BroadcastChangingOutputsStep<C extends Context, R extends Result> implements Step<C, R> {
+import java.io.File;
+
+public class BroadcastChangingOutputsStep<C extends WorkspaceContext, R extends Result> implements Step<C, R> {
 
     private final OutputChangeListener outputChangeListener;
     private final Step<? super C, ? extends R> delegate;
@@ -36,9 +41,25 @@ public class BroadcastChangingOutputsStep<C extends Context, R extends Result> i
     }
 
     @Override
-    public R execute(C context) {
-        UnitOfWork work = context.getWork();
-        outputChangeListener.beforeOutputChange(work.getChangingOutputs());
-        return delegate.execute(context);
+    public R execute(UnitOfWork work, C context) {
+        ImmutableList.Builder<String> builder = ImmutableList.builder();
+        work.visitOutputs(context.getWorkspace(), new UnitOfWork.OutputVisitor() {
+            @Override
+            public void visitOutputProperty(String propertyName, TreeType type, File root, FileCollection contents) {
+                builder.add(root.getAbsolutePath());
+            }
+
+            @Override
+            public void visitLocalState(File localStateRoot) {
+                builder.add(localStateRoot.getAbsolutePath());
+            }
+
+            @Override
+            public void visitDestroyable(File destroyableRoot) {
+                builder.add(destroyableRoot.getAbsolutePath());
+            }
+        });
+        outputChangeListener.beforeOutputChange(builder.build());
+        return delegate.execute(work, context);
     }
 }

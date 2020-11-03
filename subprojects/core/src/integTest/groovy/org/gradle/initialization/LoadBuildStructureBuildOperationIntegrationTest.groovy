@@ -18,7 +18,6 @@ package org.gradle.initialization
 
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.integtests.fixtures.BuildOperationsFixture
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
 import org.gradle.internal.operations.trace.BuildOperationRecord
 
 class LoadBuildStructureBuildOperationIntegrationTest extends AbstractIntegrationSpec {
@@ -110,7 +109,6 @@ class LoadBuildStructureBuildOperationIntegrationTest extends AbstractIntegratio
         verifyProject(project(':a'), 'a', ':a', [], customSettingsDir.file('a'))
     }
 
-    @ToBeFixedForInstantExecution(because = "composite builds")
     def "composite participants expose their project structure"() {
         settingsFile << """
         include "a"
@@ -136,6 +134,9 @@ class LoadBuildStructureBuildOperationIntegrationTest extends AbstractIntegratio
 
 
         then:
+        def buildOperations = operations()
+        buildOperations.size() == 2
+
         def rootBuildOperation = operations()[0]
         rootBuildOperation.result.buildPath == ":"
         rootBuildOperation.result.rootProject.path == ":"

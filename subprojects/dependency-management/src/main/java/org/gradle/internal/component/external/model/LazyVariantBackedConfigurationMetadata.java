@@ -79,6 +79,11 @@ class LazyVariantBackedConfigurationMetadata extends AbstractVariantBackedConfig
         }
 
         @Override
+        public Identifier getIdentifier() {
+            return delegate.getIdentifier();
+        }
+
+        @Override
         public DisplayName asDescribable() {
             return delegate.asDescribable();
         }
@@ -127,6 +132,11 @@ class LazyVariantBackedConfigurationMetadata extends AbstractVariantBackedConfig
                 computedCapabilities = variantMetadataRules.applyCapabilitiesRules(delegate, delegate.getCapabilities());
             }
             return computedCapabilities;
+        }
+
+        @Override
+        public boolean isExternalVariant() {
+            return delegate.isExternalVariant();
         }
 
         private AttributeContainerInternal mergeComponentAndVariantAttributes(AttributeContainerInternal variantAttributes) {

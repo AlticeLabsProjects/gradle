@@ -18,20 +18,26 @@ package org.gradle.performance.results;
 
 import java.io.Closeable;
 import java.util.List;
+import java.util.Map;
 
 public interface ResultsStore extends Closeable {
     /**
-     * Returns the names of the test cases known to this store, in display order.
+     * Returns the performance experiments known to this store, in display order.
      */
-    List<String> getTestNames();
+    List<PerformanceExperiment> getPerformanceExperiments();
 
     /**
-     * Returns the full history of the given test.
+     * Returns the full history of the given performance experiment.
      */
-    PerformanceTestHistory getTestResults(String testName, String channel);
+    PerformanceTestHistory getTestResults(PerformanceExperiment experiment, String channel);
 
     /**
      * Returns the n most recent instances of the given test which are younger than the max age.
      */
-    PerformanceTestHistory getTestResults(String testName, int mostRecentN, int maxDaysOld, String channel);
+    PerformanceTestHistory getTestResults(PerformanceExperiment experiment, int mostRecentN, int maxDaysOld, String channel);
+
+    /**
+     * Returns the estimated duration for each experiment in milliseconds.
+     */
+    Map<PerformanceExperimentOnOs, Long> getEstimatedExperimentDurationsInMillis();
 }

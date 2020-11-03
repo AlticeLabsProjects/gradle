@@ -22,6 +22,7 @@ import org.gradle.internal.Try
 import org.gradle.internal.execution.CurrentSnapshotResult
 import org.gradle.internal.execution.ExecutionOutcome
 import org.gradle.internal.execution.IncrementalChangesContext
+import org.gradle.internal.execution.Result
 import org.gradle.internal.execution.history.AfterPreviousExecutionState
 import org.gradle.internal.execution.history.changes.ExecutionStateChanges
 import org.gradle.internal.fingerprint.impl.EmptyCurrentFileCollectionFingerprint
@@ -37,10 +38,10 @@ class SkipUpToDateStepTest extends StepSpec<IncrementalChangesContext> {
 
     def "skips when outputs are up to date"() {
         when:
-        def result = step.execute(context)
+        def result = step.execute(work, context)
 
         then:
-        result.outcome.get() == ExecutionOutcome.UP_TO_DATE
+        result.executionResult.get().outcome == ExecutionOutcome.UP_TO_DATE
         !result.executionReasons.present
 
         _ * context.changes >> Optional.of(changes)
@@ -51,11 +52,11 @@ class SkipUpToDateStepTest extends StepSpec<IncrementalChangesContext> {
 
     def "executes when outputs are not up to date"() {
         def delegateResult = Mock(CurrentSnapshotResult)
-        def delegateOutcome = Try.successful(ExecutionOutcome.EXECUTED_NON_INCREMENTALLY)
+        def delegateOutcome = Try.successful(Mock(Result.ExecutionResult))
         def delegateFinalOutputs = ImmutableSortedMap.copyOf([test: EmptyCurrentFileCollectionFingerprint.EMPTY])
 
         when:
-        def result = step.execute(context)
+        def result = step.execute(work, context)
 
         then:
         result.executionReasons == ["change"]
@@ -63,16 +64,16 @@ class SkipUpToDateStepTest extends StepSpec<IncrementalChangesContext> {
 
         _ * context.changes >> Optional.of(changes)
         1 * changes.allChangeMessages >> ImmutableList.of("change")
-        1 * delegate.execute(context) >> delegateResult
+        1 * delegate.execute(work, context) >> delegateResult
         0 * _
 
         when:
-        def outcome = result.outcome
+        def outcome = result.executionResult
 
         then:
         outcome == delegateOutcome
 
-        1 * delegateResult.outcome >> delegateOutcome
+        1 * delegateResult.executionResult >> delegateOutcome
         0 * _
 
         when:
@@ -87,13 +88,13 @@ class SkipUpToDateStepTest extends StepSpec<IncrementalChangesContext> {
 
     def "executes when change tracking is disabled"() {
         when:
-        def result = step.execute(context)
+        def result = step.execute(work, context)
 
         then:
         result.executionReasons == ["Change tracking is disabled."]
 
         _ * context.changes >> Optional.empty()
-        1 * delegate.execute(context)
+        1 * delegate.execute(work, context)
         0 * _
     }
 }

@@ -26,7 +26,7 @@ trait TasksWithInputsAndOutputs {
 
     abstract TestFile getBuildKotlinFile()
 
-    def taskTypeWithOutputFileProperty() {
+    def taskTypeWithOutputFileProperty(TestFile buildFile = getBuildFile()) {
         buildFile << """
             class FileProducer extends DefaultTask {
                 @OutputFile
@@ -69,7 +69,7 @@ trait TasksWithInputsAndOutputs {
         """
     }
 
-    def taskTypeWithOutputDirectoryProperty() {
+    def taskTypeWithOutputDirectoryProperty(TestFile buildFile = getBuildFile()) {
         buildFile << """
             import javax.inject.Inject
 
@@ -227,7 +227,7 @@ trait TasksWithInputsAndOutputs {
         """
     }
 
-    def taskTypeLogsArtifactCollectionDetails() {
+    def taskTypeLogsArtifactCollectionDetails(TestFile buildFile = getBuildFile()) {
         buildFile << """
             class ShowArtifactCollection extends DefaultTask {
                 @Internal
@@ -240,10 +240,10 @@ trait TasksWithInputsAndOutputs {
 
                 @TaskAction
                 def log() {
-                    println("files = \${collection.artifactFiles.files.name}")
                     println("artifacts = \${collection.artifacts.id}")
                     println("components = \${collection.artifacts.id.componentIdentifier}")
                     println("variants = \${collection.artifacts.variant.attributes}")
+                    println("files = \${collection.artifactFiles.files.name}")
                 }
             }
         """

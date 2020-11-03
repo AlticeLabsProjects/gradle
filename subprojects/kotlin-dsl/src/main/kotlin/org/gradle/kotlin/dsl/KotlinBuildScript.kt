@@ -37,15 +37,19 @@ import kotlin.script.templates.ScriptTemplateDefinition
  */
 @ScriptTemplateDefinition(
     resolver = KotlinBuildScriptDependenciesResolver::class,
-    scriptFilePattern = ".*\\.gradle\\.kts"
+    scriptFilePattern = ".+\\.gradle\\.kts"
 )
-@ScriptTemplateAdditionalCompilerArguments([
-    "-jvm-target", "1.8",
-    "-Xjsr305=strict",
-    "-XXLanguage:+NewInference",
-    "-XXLanguage:+SamConversionForKotlinFunctions",
-    "-XXLanguage:+ReferencesToSyntheticJavaProperties"
-])
+@ScriptTemplateAdditionalCompilerArguments(
+    [
+        "-language-version", "1.3",
+        "-api-version", "1.3",
+        "-jvm-target", "1.8",
+        "-Xjsr305=strict",
+        "-XXLanguage:+NewInference",
+        "-XXLanguage:+SamConversionForKotlinFunctions",
+        "-XXLanguage:+ReferencesToSyntheticJavaProperties"
+    ]
+)
 @SamWithReceiverAnnotations("org.gradle.api.HasImplicitReceiver")
 @GradleDsl
 abstract class KotlinBuildScript(

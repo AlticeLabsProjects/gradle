@@ -16,8 +16,8 @@
 
 package org.gradle.smoketests
 
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
-import org.gradle.integtests.fixtures.UnsupportedWithInstantExecution
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
+import org.gradle.integtests.fixtures.UnsupportedWithConfigurationCache
 import org.gradle.testkit.runner.BuildResult
 import org.gradle.util.Requires
 import org.gradle.util.TestPrecondition
@@ -27,16 +27,21 @@ import static org.gradle.testkit.runner.TaskOutcome.FROM_CACHE
 import static org.gradle.testkit.runner.TaskOutcome.NO_SOURCE
 import static org.gradle.testkit.runner.TaskOutcome.SUCCESS
 import static org.gradle.testkit.runner.TaskOutcome.UP_TO_DATE
+import static org.hamcrest.CoreMatchers.equalTo
+import static org.hamcrest.CoreMatchers.not
+import static org.junit.Assume.assumeThat
 
 
 @Requires(TestPrecondition.JDK11_OR_EARLIER)
 class AndroidSantaTrackerKotlinCachingSmokeTest extends AbstractAndroidSantaTrackerSmokeTest {
 
     @Unroll
-    @UnsupportedWithInstantExecution(iterationMatchers = [AGP_3_ITERATION_MATCHER, AGP_4_0_ITERATION_MATCHER])
-    @ToBeFixedForInstantExecution(iterationMatchers = [AGP_4_1_ITERATION_MATCHER, AGP_4_2_ITERATION_MATCHER])
+    @UnsupportedWithConfigurationCache(iterationMatchers = [AGP_3_ITERATION_MATCHER, AGP_4_0_ITERATION_MATCHER])
+    @ToBeFixedForConfigurationCache(iterationMatchers = [AGP_4_1_ITERATION_MATCHER, AGP_4_2_ITERATION_MATCHER])
     def "can cache Santa Tracker Kotlin Android application (agp=#agpVersion)"() {
 
+        // TODO remove after next 4.2 release
+        assumeThat(agpVersion, not(equalTo("4.2.0-alpha13")))
         given:
         def originalDir = temporaryFolder.createDir("original")
         def relocatedDir = temporaryFolder.createDir("relocated")
@@ -49,19 +54,19 @@ class AndroidSantaTrackerKotlinCachingSmokeTest extends AbstractAndroidSantaTrac
         buildLocation(originalDir, agpVersion)
 
         then:
-        assertInstantExecutionStateStored()
+        assertConfigurationCacheStateStored()
 
-        when: 'up-to-date build, reusing instant execution cache when enabled'
+        when: 'up-to-date build, reusing configuration cache when enabled'
         buildLocation(originalDir, agpVersion)
 
         then:
-        assertInstantExecutionStateLoaded()
+        assertConfigurationCacheStateLoaded()
 
         when: 'clean cached build'
         BuildResult relocatedResult = buildLocation(relocatedDir, agpVersion)
 
         then:
-        assertInstantExecutionStateStored()
+        assertConfigurationCacheStateStored()
 
         and:
         def expectedResults = agpVersion.startsWith('3.6')
@@ -73,12 +78,12 @@ class AndroidSantaTrackerKotlinCachingSmokeTest extends AbstractAndroidSantaTrac
             : EXPECTED_RESULTS_4_2
         verify(relocatedResult, expectedResults)
 
-        when: 'clean cached build, reusing instant execution cache when enabled'
+        when: 'clean cached build, reusing configuration cache when enabled'
         cleanLocation(relocatedDir, agpVersion)
         buildLocation(relocatedDir, agpVersion)
 
         then:
-        assertInstantExecutionStateLoaded()
+        assertConfigurationCacheStateLoaded()
 
         where:
         agpVersion << TESTED_AGP_VERSIONS
@@ -130,6 +135,7 @@ class AndroidSantaTrackerKotlinCachingSmokeTest extends AbstractAndroidSantaTrac
         ':common:bundleDebugAar': SUCCESS,
         ':common:bundleLibCompileToJarDebug': FROM_CACHE,
         ':common:bundleLibResDebug': FROM_CACHE,
+        ':common:bundleLibRuntimeToDirDebug': FROM_CACHE,
         ':common:bundleLibRuntimeToJarDebug': FROM_CACHE,
         ':common:compileDebugAidl': NO_SOURCE,
         ':common:compileDebugJavaWithJavac': FROM_CACHE,
@@ -212,6 +218,7 @@ class AndroidSantaTrackerKotlinCachingSmokeTest extends AbstractAndroidSantaTrac
         ':doodles-lib:bundleDebugAar': SUCCESS,
         ':doodles-lib:bundleLibCompileToJarDebug': FROM_CACHE,
         ':doodles-lib:bundleLibResDebug': NO_SOURCE,
+        ':doodles-lib:bundleLibRuntimeToDirDebug': FROM_CACHE,
         ':doodles-lib:bundleLibRuntimeToJarDebug': FROM_CACHE,
         ':doodles-lib:compileDebugAidl': NO_SOURCE,
         ':doodles-lib:compileDebugJavaWithJavac': FROM_CACHE,
@@ -413,6 +420,7 @@ class AndroidSantaTrackerKotlinCachingSmokeTest extends AbstractAndroidSantaTrac
         ':playgames:bundleDebugAar': SUCCESS,
         ':playgames:bundleLibCompileToJarDebug': FROM_CACHE,
         ':playgames:bundleLibResDebug': NO_SOURCE,
+        ':playgames:bundleLibRuntimeToDirDebug': FROM_CACHE,
         ':playgames:bundleLibRuntimeToJarDebug': FROM_CACHE,
         ':playgames:compileDebugAidl': NO_SOURCE,
         ':playgames:compileDebugJavaWithJavac': FROM_CACHE,
@@ -553,7 +561,7 @@ class AndroidSantaTrackerKotlinCachingSmokeTest extends AbstractAndroidSantaTrac
         ':santa-tracker:generateDebugResValues': FROM_CACHE,
         ':santa-tracker:generateDebugResources': UP_TO_DATE,
         ':santa-tracker:handleDebugMicroApk': FROM_CACHE,
-        ':santa-tracker:kaptDebugKotlin': SUCCESS,
+        ':santa-tracker:kaptDebugKotlin': FROM_CACHE,
         ':santa-tracker:kaptGenerateStubsDebugKotlin': FROM_CACHE,
         ':santa-tracker:mergeDebugAssets': FROM_CACHE,
         ':santa-tracker:mergeDebugJavaResource': FROM_CACHE,
@@ -576,7 +584,9 @@ class AndroidSantaTrackerKotlinCachingSmokeTest extends AbstractAndroidSantaTrac
         ':santa-tracker:signingConfigWriterDebug': FROM_CACHE,
         ':santa-tracker:stripDebugDebugSymbols': NO_SOURCE,
         ':santa-tracker:validateSigningDebug': FROM_CACHE,
+        ':santa-tracker:writeDebugAppMetadata': FROM_CACHE,
         ':santa-tracker:writeDebugModuleMetadata': SUCCESS,
+        ':santa-tracker:writeDebugSigningConfigVersions': FROM_CACHE,
         ':snowballrun:assembleDebug': SUCCESS,
         ':snowballrun:checkDebugAarMetadata': FROM_CACHE,
         ':snowballrun:checkDebugDuplicateClasses': FROM_CACHE,
@@ -621,6 +631,7 @@ class AndroidSantaTrackerKotlinCachingSmokeTest extends AbstractAndroidSantaTrac
         ':tracker:bundleDebugAar': SUCCESS,
         ':tracker:bundleLibCompileToJarDebug': FROM_CACHE,
         ':tracker:bundleLibResDebug': FROM_CACHE,
+        ':tracker:bundleLibRuntimeToDirDebug': FROM_CACHE,
         ':tracker:bundleLibRuntimeToJarDebug': FROM_CACHE,
         ':tracker:compileDebugAidl': NO_SOURCE,
         ':tracker:compileDebugJavaWithJavac': SUCCESS,
@@ -678,7 +689,7 @@ class AndroidSantaTrackerKotlinCachingSmokeTest extends AbstractAndroidSantaTrac
         ':wearable:generateDebugBuildConfig': FROM_CACHE,
         ':wearable:generateDebugResValues': FROM_CACHE,
         ':wearable:generateDebugResources': UP_TO_DATE,
-        ':wearable:kaptDebugKotlin': SUCCESS,
+        ':wearable:kaptDebugKotlin': FROM_CACHE,
         ':wearable:kaptGenerateStubsDebugKotlin': FROM_CACHE,
         ':wearable:mergeDebugAssets': FROM_CACHE,
         ':wearable:mergeDebugJavaResource': FROM_CACHE,
@@ -700,6 +711,8 @@ class AndroidSantaTrackerKotlinCachingSmokeTest extends AbstractAndroidSantaTrac
         ':wearable:processDebugResources': SUCCESS,
         ':wearable:stripDebugDebugSymbols': NO_SOURCE,
         ':wearable:validateSigningDebug': FROM_CACHE,
+        ':wearable:writeDebugAppMetadata': FROM_CACHE,
+        ':wearable:writeDebugSigningConfigVersions': FROM_CACHE,
     ]
 
     private static final EXPECTED_RESULTS_4_1 = [
@@ -1163,7 +1176,7 @@ class AndroidSantaTrackerKotlinCachingSmokeTest extends AbstractAndroidSantaTrac
         ':santa-tracker:generateDebugResources': UP_TO_DATE,
         ':santa-tracker:handleDebugMicroApk': FROM_CACHE,
         ':santa-tracker:javaPreCompileDebug': FROM_CACHE,
-        ':santa-tracker:kaptDebugKotlin': SUCCESS,
+        ':santa-tracker:kaptDebugKotlin': FROM_CACHE,
         ':santa-tracker:kaptGenerateStubsDebugKotlin': FROM_CACHE,
         ':santa-tracker:mergeDebugAssets': FROM_CACHE,
         ':santa-tracker:mergeDebugJavaResource': FROM_CACHE,
@@ -1288,7 +1301,7 @@ class AndroidSantaTrackerKotlinCachingSmokeTest extends AbstractAndroidSantaTrac
         ':wearable:generateDebugResValues': FROM_CACHE,
         ':wearable:generateDebugResources': UP_TO_DATE,
         ':wearable:javaPreCompileDebug': FROM_CACHE,
-        ':wearable:kaptDebugKotlin': SUCCESS,
+        ':wearable:kaptDebugKotlin': FROM_CACHE,
         ':wearable:kaptGenerateStubsDebugKotlin': FROM_CACHE,
         ':wearable:mergeDebugAssets': FROM_CACHE,
         ':wearable:mergeDebugJavaResource': FROM_CACHE,
@@ -1720,7 +1733,7 @@ class AndroidSantaTrackerKotlinCachingSmokeTest extends AbstractAndroidSantaTrac
         ':santa-tracker:generateDebugResources': UP_TO_DATE,
         ':santa-tracker:handleDebugMicroApk': FROM_CACHE,
         ':santa-tracker:javaPreCompileDebug': FROM_CACHE,
-        ':santa-tracker:kaptDebugKotlin': SUCCESS,
+        ':santa-tracker:kaptDebugKotlin': FROM_CACHE,
         ':santa-tracker:kaptGenerateStubsDebugKotlin': FROM_CACHE,
         ':santa-tracker:mergeDebugAssets': FROM_CACHE,
         ':santa-tracker:mergeDebugJavaResource': SUCCESS,
@@ -1833,7 +1846,7 @@ class AndroidSantaTrackerKotlinCachingSmokeTest extends AbstractAndroidSantaTrac
         ':wearable:generateDebugResValues': FROM_CACHE,
         ':wearable:generateDebugResources': UP_TO_DATE,
         ':wearable:javaPreCompileDebug': FROM_CACHE,
-        ':wearable:kaptDebugKotlin': SUCCESS,
+        ':wearable:kaptDebugKotlin': FROM_CACHE,
         ':wearable:kaptGenerateStubsDebugKotlin': FROM_CACHE,
         ':wearable:mergeDebugAssets': FROM_CACHE,
         ':wearable:mergeDebugJavaResource': SUCCESS,
@@ -2267,7 +2280,7 @@ class AndroidSantaTrackerKotlinCachingSmokeTest extends AbstractAndroidSantaTrac
         ':santa-tracker:generateDebugResources': SUCCESS,
         ':santa-tracker:handleDebugMicroApk': SUCCESS,
         ':santa-tracker:javaPreCompileDebug': FROM_CACHE,
-        ':santa-tracker:kaptDebugKotlin': SUCCESS,
+        ':santa-tracker:kaptDebugKotlin': FROM_CACHE,
         ':santa-tracker:kaptGenerateStubsDebugKotlin': FROM_CACHE,
         ':santa-tracker:mainApkListPersistenceDebug': FROM_CACHE,
         ':santa-tracker:mergeDebugAssets': FROM_CACHE,
@@ -2381,7 +2394,7 @@ class AndroidSantaTrackerKotlinCachingSmokeTest extends AbstractAndroidSantaTrac
         ':wearable:generateDebugResValues': FROM_CACHE,
         ':wearable:generateDebugResources': UP_TO_DATE,
         ':wearable:javaPreCompileDebug': FROM_CACHE,
-        ':wearable:kaptDebugKotlin': SUCCESS,
+        ':wearable:kaptDebugKotlin': FROM_CACHE,
         ':wearable:kaptGenerateStubsDebugKotlin': FROM_CACHE,
         ':wearable:mainApkListPersistenceDebug': FROM_CACHE,
         ':wearable:mergeDebugAssets': FROM_CACHE,

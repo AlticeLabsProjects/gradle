@@ -21,14 +21,18 @@ import org.gradle.api.artifacts.type.ArtifactTypeContainer;
 import org.gradle.api.artifacts.type.ArtifactTypeDefinition;
 import org.gradle.api.internal.CollectionCallbackActionDecorator;
 import org.gradle.api.internal.artifacts.ArtifactAttributes;
+import org.gradle.api.internal.artifacts.ArtifactTransformRegistration;
+import org.gradle.api.internal.artifacts.VariantTransformRegistry;
 import org.gradle.api.internal.attributes.AttributeContainerInternal;
 import org.gradle.api.internal.attributes.ImmutableAttributes;
 import org.gradle.api.internal.attributes.ImmutableAttributesFactory;
 import org.gradle.internal.component.model.ComponentArtifactMetadata;
-import org.gradle.internal.component.model.VariantResolveMetadata;
 import org.gradle.internal.reflect.Instantiator;
 
 import java.io.File;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.function.Consumer;
 
 import static org.gradle.api.internal.artifacts.ArtifactAttributes.ARTIFACT_FORMAT;
 
@@ -36,12 +40,32 @@ public class DefaultArtifactTypeRegistry implements ArtifactTypeRegistry {
     private final Instantiator instantiator;
     private final ImmutableAttributesFactory attributesFactory;
     private final CollectionCallbackActionDecorator callbackActionDecorator;
+    private final VariantTransformRegistry transformRegistry;
     private ArtifactTypeContainer artifactTypeDefinitions;
 
-    public DefaultArtifactTypeRegistry(Instantiator instantiator, ImmutableAttributesFactory attributesFactory, CollectionCallbackActionDecorator callbackActionDecorator) {
+    public DefaultArtifactTypeRegistry(Instantiator instantiator, ImmutableAttributesFactory attributesFactory, CollectionCallbackActionDecorator callbackActionDecorator, VariantTransformRegistry transformRegistry) {
         this.instantiator = instantiator;
         this.attributesFactory = attributesFactory;
         this.callbackActionDecorator = callbackActionDecorator;
+        this.transformRegistry = transformRegistry;
+    }
+
+    @Override
+    public void visitArtifactTypes(Consumer<String> action) {
+        Set<String> seen = new HashSet<>();
+        if (artifactTypeDefinitions != null) {
+            for (ArtifactTypeDefinition artifactTypeDefinition : artifactTypeDefinitions) {
+                seen.add(artifactTypeDefinition.getName());
+                action.accept(artifactTypeDefinition.getName());
+            }
+        }
+        for (ArtifactTransformRegistration transform : transformRegistry.getTransforms()) {
+            String format = transform.getFrom().getAttribute(ARTIFACT_FORMAT);
+            // Not a directory and some format that is not already registered
+            if (format != null && !format.equals(ArtifactTypeDefinition.DIRECTORY_TYPE) && seen.add(format)) {
+                action.accept(format);
+            }
+        }
     }
 
     @Override
@@ -68,13 +92,11 @@ public class DefaultArtifactTypeRegistry implements ArtifactTypeRegistry {
     }
 
     @Override
-    public ImmutableAttributes mapAttributesFor(VariantResolveMetadata variant) {
-        ImmutableAttributes attributes = variant.getAttributes().asImmutable();
-
+    public ImmutableAttributes mapAttributesFor(ImmutableAttributes attributes, Iterable<? extends ComponentArtifactMetadata> artifacts) {
         // Add attributes to be applied given the extension
         if (artifactTypeDefinitions != null) {
             String extension = null;
-            for (ComponentArtifactMetadata artifact : variant.getArtifacts()) {
+            for (ComponentArtifactMetadata artifact : artifacts) {
                 String candidateExtension = artifact.getName().getExtension();
                 if (extension == null) {
                     extension = candidateExtension;
@@ -91,7 +113,7 @@ public class DefaultArtifactTypeRegistry implements ArtifactTypeRegistry {
         // Add artifact format as an implicit attribute when all artifacts have the same format
         if (!attributes.contains(ArtifactAttributes.ARTIFACT_FORMAT)) {
             String format = null;
-            for (ComponentArtifactMetadata artifact : variant.getArtifacts()) {
+            for (ComponentArtifactMetadata artifact : artifacts) {
                 String candidateFormat = artifact.getName().getType();
                 if (format == null) {
                     format = candidateFormat;

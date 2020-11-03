@@ -200,6 +200,15 @@ fun Project.collectKotlinDslScripts(): List<File> = sequence<File> {
 
     val extension = ".gradle.kts"
 
+    // Init Scripts
+    project
+        .gradle
+        .startParameter
+        .allInitScripts
+        .filter(File::isFile)
+        .filter { it.name.endsWith(extension) }
+        .forEach { yield(it) }
+
     // Settings Script
     val settingsScriptFile = File((project as ProjectInternal).gradle.settings.settingsScript.fileName)
     if (settingsScriptFile.isFile && settingsScriptFile.name.endsWith(extension)) {
@@ -235,7 +244,7 @@ data class KotlinDslScriptsParameter(
 
 internal
 fun <T : Any> commonPrefixOf(lists: List<List<T>>): List<T> =
-    lists.minBy { it.size }?.let { maxCommonPrefix ->
+    lists.minByOrNull { it.size }?.let { maxCommonPrefix ->
         maxCommonPrefix.indices.asSequence().takeWhile { index ->
             lists.all { list -> list[index] == maxCommonPrefix[index] }
         }.lastOrNull()?.let { maxCommonIndex ->

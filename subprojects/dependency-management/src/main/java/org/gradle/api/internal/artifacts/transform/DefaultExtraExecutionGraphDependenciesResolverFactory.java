@@ -17,26 +17,30 @@
 package org.gradle.api.internal.artifacts.transform;
 
 import org.gradle.api.artifacts.component.ComponentIdentifier;
+import org.gradle.api.internal.DomainObjectContext;
 import org.gradle.api.internal.artifacts.ResolverResults;
-import org.gradle.api.internal.tasks.WorkNodeAction;
 import org.gradle.internal.Factory;
 
 public class DefaultExtraExecutionGraphDependenciesResolverFactory implements ExtraExecutionGraphDependenciesResolverFactory {
+    public static final TransformUpstreamDependenciesResolver NO_DEPENDENCIES_RESOLVER = transformationStep -> DefaultTransformUpstreamDependenciesResolver.NO_DEPENDENCIES;
+
     private final Factory<ResolverResults> graphResults;
     private final Factory<ResolverResults> artifactResults;
-    private final WorkNodeAction graphResolveAction;
+    private final DomainObjectContext owner;
     private final FilteredResultFactory filteredResultFactory;
 
-    public DefaultExtraExecutionGraphDependenciesResolverFactory(Factory<ResolverResults> graphResults, Factory<ResolverResults> artifactResults, WorkNodeAction graphResolveAction, FilteredResultFactory filteredResultFactory) {
+    public DefaultExtraExecutionGraphDependenciesResolverFactory(Factory<ResolverResults> graphResults, Factory<ResolverResults> artifactResults, DomainObjectContext owner, FilteredResultFactory filteredResultFactory) {
         this.graphResults = graphResults;
         this.artifactResults = artifactResults;
-        this.graphResolveAction = graphResolveAction;
+        this.owner = owner;
         this.filteredResultFactory = filteredResultFactory;
     }
 
     @Override
-    public ExecutionGraphDependenciesResolver
-    create(ComponentIdentifier componentIdentifier) {
-        return new DefaultExecutionGraphDependenciesResolver(componentIdentifier, graphResults, artifactResults, graphResolveAction, filteredResultFactory);
+    public TransformUpstreamDependenciesResolver create(ComponentIdentifier componentIdentifier, Transformation transformation) {
+        if (!transformation.requiresDependencies()) {
+            return NO_DEPENDENCIES_RESOLVER;
+        }
+        return new DefaultTransformUpstreamDependenciesResolver(componentIdentifier, graphResults, artifactResults, owner, filteredResultFactory);
     }
 }

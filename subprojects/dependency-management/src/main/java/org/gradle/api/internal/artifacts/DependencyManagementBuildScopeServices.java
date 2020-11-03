@@ -28,6 +28,7 @@ import org.gradle.api.internal.FeaturePreviews;
 import org.gradle.api.internal.GradleInternal;
 import org.gradle.api.internal.artifacts.component.ComponentIdentifierFactory;
 import org.gradle.api.internal.artifacts.component.DefaultComponentIdentifierFactory;
+import org.gradle.api.internal.artifacts.configurations.DependencyMetaDataProvider;
 import org.gradle.api.internal.artifacts.dsl.CapabilityNotationParserFactory;
 import org.gradle.api.internal.artifacts.dsl.dependencies.DependencyFactory;
 import org.gradle.api.internal.artifacts.ivyservice.ArtifactCacheLockingManager;
@@ -82,6 +83,8 @@ import org.gradle.api.internal.artifacts.ivyservice.projectmodule.DefaultProject
 import org.gradle.api.internal.artifacts.ivyservice.projectmodule.DefaultProjectPublicationRegistry;
 import org.gradle.api.internal.artifacts.ivyservice.projectmodule.LocalComponentProvider;
 import org.gradle.api.internal.artifacts.ivyservice.projectmodule.LocalComponentRegistry;
+import org.gradle.api.internal.artifacts.ivyservice.projectmodule.ProjectArtifactResolver;
+import org.gradle.api.internal.artifacts.ivyservice.projectmodule.ProjectArtifactSetResolver;
 import org.gradle.api.internal.artifacts.ivyservice.projectmodule.ProjectDependencyResolver;
 import org.gradle.api.internal.artifacts.ivyservice.projectmodule.ProjectPublicationRegistry;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.DefaultArtifactDependencyResolver;
@@ -107,6 +110,7 @@ import org.gradle.api.internal.artifacts.verification.signatures.DefaultSignatur
 import org.gradle.api.internal.artifacts.verification.signatures.SignatureVerificationServiceFactory;
 import org.gradle.api.internal.attributes.ImmutableAttributesFactory;
 import org.gradle.api.internal.file.FileCollectionFactory;
+import org.gradle.api.internal.file.FileResolver;
 import org.gradle.api.internal.file.TemporaryFileProvider;
 import org.gradle.api.internal.file.TmpDirTemporaryFileProvider;
 import org.gradle.api.internal.filestore.ArtifactIdentifierFileStore;
@@ -123,12 +127,18 @@ import org.gradle.api.internal.project.ProjectStateRegistry;
 import org.gradle.api.internal.properties.GradleProperties;
 import org.gradle.api.internal.resources.ApiTextResourceAdapter;
 import org.gradle.api.internal.runtimeshaded.RuntimeShadedJarFactory;
+import org.gradle.api.internal.std.DefaultDependenciesAccessors;
+import org.gradle.api.internal.std.DependenciesAccessorsWorkspace;
+import org.gradle.api.model.ObjectFactory;
+import org.gradle.api.provider.ProviderFactory;
 import org.gradle.cache.CacheRepository;
 import org.gradle.cache.internal.CacheScopeMapping;
 import org.gradle.cache.internal.CleaningInMemoryCacheDecoratorFactory;
 import org.gradle.cache.internal.GeneratedGradleJarCache;
 import org.gradle.cache.internal.InMemoryCacheDecoratorFactory;
 import org.gradle.cache.internal.ProducerGuard;
+import org.gradle.configuration.internal.UserCodeApplicationContext;
+import org.gradle.initialization.DependenciesAccessors;
 import org.gradle.initialization.InternalBuildFinishedListener;
 import org.gradle.initialization.ProjectAccessListener;
 import org.gradle.initialization.layout.BuildLayout;
@@ -148,6 +158,8 @@ import org.gradle.internal.hash.FileHasher;
 import org.gradle.internal.installation.CurrentGradleInstallation;
 import org.gradle.internal.instantiation.InstantiatorFactory;
 import org.gradle.internal.logging.progress.ProgressLoggerFactory;
+import org.gradle.internal.management.DefaultDependencyResolutionManagement;
+import org.gradle.internal.management.DependencyResolutionManagementInternal;
 import org.gradle.internal.operations.BuildOperationExecutor;
 import org.gradle.internal.reflect.Instantiator;
 import org.gradle.internal.resolve.caching.ComponentMetadataRuleExecutor;
@@ -168,6 +180,7 @@ import org.gradle.internal.resource.local.LocallyAvailableResourceFinder;
 import org.gradle.internal.resource.local.ivy.LocallyAvailableResourceFinderFactory;
 import org.gradle.internal.resource.transfer.CachingTextUriResourceLoader;
 import org.gradle.internal.resource.transport.http.HttpConnectorFactory;
+import org.gradle.internal.service.ServiceRegistration;
 import org.gradle.internal.service.ServiceRegistry;
 import org.gradle.internal.snapshot.ValueSnapshotter;
 import org.gradle.internal.typeconversion.NotationParser;
@@ -187,6 +200,31 @@ import java.util.concurrent.atomic.AtomicReference;
  * The set of dependency management services that are created per build.
  */
 class DependencyManagementBuildScopeServices {
+    void configure(ServiceRegistration registration) {
+        registration.add(ProjectArtifactResolver.class);
+        registration.add(ProjectArtifactSetResolver.class);
+        registration.add(ProjectDependencyResolver.class);
+    }
+
+    DependencyResolutionManagementInternal createSharedDependencyResolutionServices(Instantiator instantiator,
+                                                                                    UserCodeApplicationContext context,
+                                                                                    DependencyManagementServices dependencyManagementServices,
+                                                                                    FileResolver fileResolver,
+                                                                                    FileCollectionFactory fileCollectionFactory,
+                                                                                    DependencyMetaDataProvider dependencyMetaDataProvider,
+                                                                                    ObjectFactory objects,
+                                                                                    ProviderFactory providers) {
+        return instantiator.newInstance(DefaultDependencyResolutionManagement.class,
+            context,
+            dependencyManagementServices,
+            fileResolver,
+            fileCollectionFactory,
+            dependencyMetaDataProvider,
+            objects,
+            providers
+        );
+    }
+
     DependencyManagementServices createDependencyManagementServices(ServiceRegistry parent) {
         return new DefaultDependencyManagementServices(parent);
     }
@@ -207,20 +245,26 @@ class DependencyManagementBuildScopeServices {
         return defaultVersionComparator;
     }
 
+    DefaultProjectDependencyFactory createProjectDependencyFactory(
+        Instantiator instantiator,
+        StartParameter startParameter,
+        ProjectAccessListener projectAccessListener,
+        ImmutableAttributesFactory attributesFactory) {
+        NotationParser<Object, Capability> capabilityNotationParser = new CapabilityNotationParserFactory(false).create();
+        return new DefaultProjectDependencyFactory(
+            projectAccessListener, instantiator, startParameter.isBuildProjectDependencies(), capabilityNotationParser, attributesFactory);
+    }
+
     DependencyFactory createDependencyFactory(
         Instantiator instantiator,
-        ListenerManager listenerManager,
-        StartParameter startParameter,
+        DefaultProjectDependencyFactory factory,
         ClassPathRegistry classPathRegistry,
         CurrentGradleInstallation currentGradleInstallation,
         FileCollectionFactory fileCollectionFactory,
         RuntimeShadedJarFactory runtimeShadedJarFactory,
-        ProjectAccessListener projectAccessListener,
         ImmutableAttributesFactory attributesFactory,
         SimpleMapInterner stringInterner) {
         NotationParser<Object, Capability> capabilityNotationParser = new CapabilityNotationParserFactory(false).create();
-        DefaultProjectDependencyFactory factory = new DefaultProjectDependencyFactory(
-            projectAccessListener, instantiator, startParameter.isBuildProjectDependencies(), capabilityNotationParser, attributesFactory);
         ProjectDependencyFactory projectDependencyFactory = new ProjectDependencyFactory(factory);
 
         return new DefaultDependencyFactory(
@@ -522,7 +566,8 @@ class DependencyManagementBuildScopeServices {
                                                                 VersionParser versionParser,
                                                                 ComponentMetadataSupplierRuleExecutor componentMetadataSupplierRuleExecutor,
                                                                 InstantiatorFactory instantiatorFactory,
-                                                                ComponentSelectionDescriptorFactory componentSelectionDescriptorFactory) {
+                                                                ComponentSelectionDescriptorFactory componentSelectionDescriptorFactory,
+                                                                FeaturePreviews featurePreviews) {
         return new DefaultArtifactDependencyResolver(
             buildOperationExecutor,
             resolverFactories,
@@ -537,7 +582,8 @@ class DependencyManagementBuildScopeServices {
             versionParser,
             componentMetadataSupplierRuleExecutor,
             instantiatorFactory,
-            componentSelectionDescriptorFactory);
+            componentSelectionDescriptorFactory,
+            featurePreviews);
     }
 
     ProjectPublicationRegistry createProjectPublicationRegistry() {
@@ -552,11 +598,7 @@ class DependencyManagementBuildScopeServices {
         return new DefaultLocalComponentRegistry(providers);
     }
 
-    ProjectDependencyResolver createProjectDependencyResolver(LocalComponentRegistry localComponentRegistry, ComponentIdentifierFactory componentIdentifierFactory, ProjectStateRegistry projectStateRegistry) {
-        return new ProjectDependencyResolver(localComponentRegistry, componentIdentifierFactory, projectStateRegistry);
-    }
-
-    ComponentSelectorConverter createModuleVersionSelectorFactory(ImmutableModuleIdentifierFactory moduleIdentifierFactory, ComponentIdentifierFactory componentIdentifierFactory, LocalComponentRegistry localComponentRegistry) {
+    ComponentSelectorConverter createModuleVersionSelectorFactory(ComponentIdentifierFactory componentIdentifierFactory, LocalComponentRegistry localComponentRegistry) {
         return new DefaultComponentSelectorConverter(componentIdentifierFactory, localComponentRegistry);
     }
 
@@ -648,4 +690,13 @@ class DependencyManagementBuildScopeServices {
             }
         });
     }
+
+    DependenciesAccessors createDependenciesAccessorGenerator(ClassPathRegistry registry,
+                                                              DependenciesAccessorsWorkspace workspace,
+                                                              DefaultProjectDependencyFactory factory,
+                                                              BuildOperationExecutor buildOperationExecutor,
+                                                              FeaturePreviews featurePreviews) {
+        return new DefaultDependenciesAccessors(registry, workspace, factory, buildOperationExecutor, featurePreviews);
+    }
+
 }

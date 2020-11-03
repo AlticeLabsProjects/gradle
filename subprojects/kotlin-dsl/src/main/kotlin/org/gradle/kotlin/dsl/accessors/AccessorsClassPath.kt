@@ -17,36 +17,38 @@
 package org.gradle.kotlin.dsl.accessors
 
 import org.gradle.api.Project
+import org.gradle.api.internal.file.FileCollectionFactory
 import org.gradle.api.internal.project.ProjectInternal
-
 import org.gradle.cache.internal.CacheKeyBuilder.CacheKeySpec
-
 import org.gradle.internal.classanalysis.AsmConstants.ASM_LEVEL
-
 import org.gradle.internal.classpath.ClassPath
 import org.gradle.internal.classpath.DefaultClassPath
-
+import org.gradle.internal.execution.ExecutionEngine
+import org.gradle.internal.execution.InputChangesContext
+import org.gradle.internal.execution.UnitOfWork
+import org.gradle.internal.execution.UnitOfWork.IdentityKind.IDENTITY
+import org.gradle.internal.execution.UnitOfWork.InputPropertyType.NON_INCREMENTAL
+import org.gradle.internal.execution.history.ExecutionHistoryStore
+import org.gradle.internal.execution.history.changes.InputChangesInternal
+import org.gradle.internal.file.TreeType.DIRECTORY
+import org.gradle.internal.fingerprint.CurrentFileCollectionFingerprint
+import org.gradle.internal.fingerprint.classpath.ClasspathFingerprinter
 import org.gradle.internal.hash.HashCode
 import org.gradle.internal.hash.Hasher
 import org.gradle.internal.hash.Hashing
-
-import org.gradle.kotlin.dsl.cache.ScriptCache
+import org.gradle.internal.snapshot.ValueSnapshot
+import org.gradle.kotlin.dsl.cache.KotlinDslWorkspaceProvider
 import org.gradle.kotlin.dsl.codegen.fileHeaderFor
 import org.gradle.kotlin.dsl.codegen.kotlinDslPackageName
-
 import org.gradle.kotlin.dsl.concurrent.IO
 import org.gradle.kotlin.dsl.concurrent.withAsynchronousIO
-
 import org.gradle.kotlin.dsl.support.ClassBytesRepository
 import org.gradle.kotlin.dsl.support.appendReproducibleNewLine
-import org.gradle.kotlin.dsl.support.serviceOf
 import org.gradle.kotlin.dsl.support.useToRun
-
 import org.jetbrains.kotlin.metadata.ProtoBuf
 import org.jetbrains.kotlin.metadata.ProtoBuf.Visibility
 import org.jetbrains.kotlin.metadata.deserialization.Flags
 import org.jetbrains.kotlin.metadata.jvm.deserialization.JvmProtoBufUtil
-
 import org.jetbrains.org.objectweb.asm.AnnotationVisitor
 import org.jetbrains.org.objectweb.asm.ClassReader
 import org.jetbrains.org.objectweb.asm.ClassVisitor
@@ -54,33 +56,137 @@ import org.jetbrains.org.objectweb.asm.Opcodes.ACC_PUBLIC
 import org.jetbrains.org.objectweb.asm.Opcodes.ACC_SYNTHETIC
 import org.jetbrains.org.objectweb.asm.signature.SignatureReader
 import org.jetbrains.org.objectweb.asm.signature.SignatureVisitor
-
 import java.io.Closeable
 import java.io.File
+import java.util.Optional
+import javax.inject.Inject
 
 
-fun projectAccessorsClassPath(project: Project, classPath: ClassPath): AccessorsClassPath =
-    project.getOrCreateProperty("gradleKotlinDsl.projectAccessorsClassPath") {
-        buildAccessorsClassPathFor(project, classPath)
-            ?: AccessorsClassPath.empty
+class ProjectAccessorsClassPathGenerator @Inject constructor(
+    private val classpathFingerprinter: ClasspathFingerprinter,
+    private val fileCollectionFactory: FileCollectionFactory,
+    private val projectSchemaProvider: ProjectSchemaProvider,
+    private val executionEngine: ExecutionEngine,
+    private val workspaceProvider: KotlinDslWorkspaceProvider
+) {
+
+    fun projectAccessorsClassPath(project: Project, classPath: ClassPath): AccessorsClassPath =
+        project.getOrCreateProperty("gradleKotlinDsl.projectAccessorsClassPath") {
+            buildAccessorsClassPathFor(project, classPath)
+                ?: AccessorsClassPath.empty
+        }
+
+
+    private
+    fun buildAccessorsClassPathFor(project: Project, classPath: ClassPath): AccessorsClassPath? {
+        return configuredProjectSchemaOf(project)?.let { projectSchema ->
+            val work = GenerateProjectAccessors(
+                project,
+                projectSchema,
+                classPath,
+                classpathFingerprinter,
+                workspaceProvider.history,
+                fileCollectionFactory,
+                workspaceProvider
+            )
+            val result = executionEngine.execute(work, null)
+            result.executionResult.get().output as AccessorsClassPath
+        }
     }
+
+
+    private
+    fun configuredProjectSchemaOf(project: Project): TypedProjectSchema? =
+        if (enabledJitAccessors(project)) {
+            require(classLoaderScopeOf(project).isLocked) {
+                "project.classLoaderScope must be locked before querying the project schema"
+            }
+            projectSchemaProvider.schemaFor(project).takeIf { it.isNotEmpty() }
+        } else null
+}
+
+
+class GenerateProjectAccessors(
+    private val project: Project,
+    private val projectSchema: TypedProjectSchema,
+    private val classPath: ClassPath,
+    private val classpathFingerprinter: ClasspathFingerprinter,
+    private val executionHistoryStore: ExecutionHistoryStore,
+    private val fileCollectionFactory: FileCollectionFactory,
+    private val workspaceProvider: KotlinDslWorkspaceProvider
+) : UnitOfWork {
+
+    companion object {
+        const val PROJECT_SCHEMA_INPUT_PROPERTY = "projectSchema"
+        const val CLASSPATH_INPUT_PROPERTY = "classpath"
+        const val SOURCES_OUTPUT_PROPERTY = "sources"
+        const val CLASSES_OUTPUT_PROPERTY = "classes"
+    }
+
+    override fun execute(inputChanges: InputChangesInternal?, context: InputChangesContext): UnitOfWork.WorkOutput {
+        withAsynchronousIO(project) {
+            buildAccessorsFor(
+                projectSchema,
+                classPath,
+                srcDir = getSourcesOutputDir(context.workspace),
+                binDir = getClassesOutputDir(context.workspace)
+            )
+        }
+        return object : UnitOfWork.WorkOutput {
+            override fun getDidWork() = UnitOfWork.WorkResult.DID_WORK
+
+            override fun getOutput() = loadRestoredOutput(context.workspace)
+        }
+    }
+
+    override fun loadRestoredOutput(workspace: File) = AccessorsClassPath(
+        DefaultClassPath.of(getClassesOutputDir(workspace)),
+        DefaultClassPath.of(getSourcesOutputDir(workspace))
+    )
+
+    override fun identify(identityInputs: Map<String, ValueSnapshot>, identityFileInputs: Map<String, CurrentFileCollectionFingerprint>): UnitOfWork.Identity {
+        val hasher = Hashing.newHasher()
+        requireNotNull(identityInputs[PROJECT_SCHEMA_INPUT_PROPERTY]).appendToHasher(hasher)
+        hasher.putHash(requireNotNull(identityFileInputs[CLASSPATH_INPUT_PROPERTY]).hash)
+        val identityHash = hasher.hash().toString()
+        return UnitOfWork.Identity { identityHash }
+    }
+
+    override fun getHistory(): Optional<ExecutionHistoryStore> = Optional.of(executionHistoryStore)
+
+    override fun <T : Any> withWorkspace(identity: String, action: UnitOfWork.WorkspaceAction<T>): T =
+        workspaceProvider.withWorkspace("$accessorsWorkspacePrefix/$identity") { workspace, _ ->
+            action.executeInWorkspace(workspace)
+        }
+
+    override fun getDisplayName(): String = "Kotlin DSL accessors for $project"
+
+    override fun visitImplementations(visitor: UnitOfWork.ImplementationVisitor) {
+        visitor.visitImplementation(GenerateProjectAccessors::class.java)
+    }
+
+    override fun visitInputs(visitor: UnitOfWork.InputVisitor) {
+        visitor.visitInputProperty(PROJECT_SCHEMA_INPUT_PROPERTY, IDENTITY) { hashCodeFor(projectSchema) }
+        visitor.visitInputFileProperty(CLASSPATH_INPUT_PROPERTY, NON_INCREMENTAL, IDENTITY, classPath) {
+            classpathFingerprinter.fingerprint(fileCollectionFactory.fixed(classPath.asFiles))
+        }
+    }
+
+    override fun visitOutputs(workspace: File, visitor: UnitOfWork.OutputVisitor) {
+        val sourcesOutputDir = getSourcesOutputDir(workspace)
+        val classesOutputDir = getClassesOutputDir(workspace)
+        visitor.visitOutputProperty(SOURCES_OUTPUT_PROPERTY, DIRECTORY, sourcesOutputDir, fileCollectionFactory.fixed(sourcesOutputDir))
+        visitor.visitOutputProperty(CLASSES_OUTPUT_PROPERTY, DIRECTORY, classesOutputDir, fileCollectionFactory.fixed(classesOutputDir))
+    }
+}
 
 
 private
-fun buildAccessorsClassPathFor(project: Project, classPath: ClassPath) =
-    configuredProjectSchemaOf(project)?.let { projectSchema ->
-        // TODO:accessors make cache key computation more efficient
-        cachedAccessorsClassPathFor(project, cacheKeyFor(projectSchema, classPath)) { srcDir, binDir ->
-            withAsynchronousIO(project) {
-                buildAccessorsFor(
-                    projectSchema,
-                    classPath,
-                    srcDir = srcDir,
-                    binDir = binDir
-                )
-            }
-        }
-    }
+fun getClassesOutputDir(workspace: File) = File(workspace, "classes")
+
+
+private
+fun getSourcesOutputDir(workspace: File): File = File(workspace, "sources")
 
 
 data class AccessorsClassPath(val bin: ClassPath, val src: ClassPath) {
@@ -92,60 +198,6 @@ data class AccessorsClassPath(val bin: ClassPath, val src: ClassPath) {
     operator fun plus(other: AccessorsClassPath) =
         AccessorsClassPath(bin + other.bin, src + other.src)
 }
-
-
-internal
-fun cachedAccessorsClassPathFor(
-    project: Project,
-    cacheKeySpec: CacheKeySpec,
-    builder: (File, File) -> Unit
-): AccessorsClassPath {
-
-    val cacheDir =
-        scriptCacheOf(project)
-            .cacheDirFor(cacheKeySpec) { baseDir ->
-                builder(
-                    accessorsSourceDir(baseDir),
-                    accessorsClassesDir(baseDir)
-                )
-            }
-
-    return AccessorsClassPath(
-        DefaultClassPath.of(accessorsClassesDir(cacheDir)),
-        DefaultClassPath.of(accessorsSourceDir(cacheDir))
-    )
-}
-
-
-private
-fun accessorsSourceDir(baseDir: File) = baseDir.resolve("src")
-
-
-private
-fun accessorsClassesDir(baseDir: File) = baseDir.resolve("classes")
-
-
-private
-fun configuredProjectSchemaOf(project: Project): TypedProjectSchema? =
-    if (enabledJitAccessors(project)) {
-        require(classLoaderScopeOf(project).isLocked) {
-            "project.classLoaderScope must be locked before querying the project schema"
-        }
-        schemaFor(project).takeIf { it.isNotEmpty() }
-    } else null
-
-
-fun schemaFor(project: Project): TypedProjectSchema =
-    projectSchemaProviderOf(project).schemaFor(project)
-
-
-private
-fun projectSchemaProviderOf(project: Project) =
-    project.serviceOf<ProjectSchemaProvider>()
-
-
-private
-fun scriptCacheOf(project: Project) = project.serviceOf<ScriptCache>()
 
 
 fun IO.buildAccessorsFor(
@@ -254,7 +306,7 @@ class TypeAccessibilityProvider(classPath: ClassPath) : Closeable {
     val typeAccessibilityInfoPerClass = mutableMapOf<String, TypeAccessibilityInfo>()
 
     fun accessibilityForType(type: SchemaType): TypeAccessibility =
-    // TODO:accessors cache per SchemaType
+        // TODO:accessors cache per SchemaType
         inaccessibilityReasonsFor(classNamesFromTypeString(type)).let { inaccessibilityReasons ->
             if (inaccessibilityReasons.isNotEmpty()) inaccessible(type, inaccessibilityReasons)
             else accessible(type)
@@ -294,7 +346,8 @@ class TypeAccessibilityProvider(classPath: ClassPath) : Closeable {
                     ACC_SYNTHETIC in access -> synthetic(className)
                     isNonPublicKotlinType(classReader) -> nonPublic(className)
                     else -> null
-                }),
+                }
+            ),
             hasTypeParameters(classReader)
         )
     }
@@ -343,8 +396,7 @@ fun classNamesFromTypeString(typeString: String): ClassNamesFromTypeString {
     var buffer = StringBuilder()
 
     fun nonPrimitiveKotlinType(): String? =
-        if (buffer.isEmpty()) null
-        else buffer.toString().let {
+        buffer.takeIf(StringBuilder::isNotEmpty)?.toString()?.let {
             if (it in primitiveKotlinTypeNames) null
             else it
         }
@@ -495,18 +547,11 @@ fun classLoaderScopeOf(project: Project) =
 
 
 internal
-const val accessorCacheKeyPrefix = "gradle-kotlin-dsl-accessors"
+const val accessorsWorkspacePrefix = "accessors"
 
 
 internal
-val accessorsCacheKeySpecPrefix = CacheKeySpec.withPrefix(accessorCacheKeyPrefix)
-
-
-private
-fun cacheKeyFor(projectSchema: TypedProjectSchema, classPath: ClassPath): CacheKeySpec =
-    (accessorsCacheKeySpecPrefix
-        + hashCodeFor(projectSchema)
-        + classPath)
+val accessorsCacheKeySpecPrefix = CacheKeySpec.withPrefix(accessorsWorkspacePrefix)
 
 
 fun hashCodeFor(schema: TypedProjectSchema): HashCode = Hashing.newHasher().run {
@@ -587,6 +632,7 @@ import org.gradle.api.artifacts.PublishArtifact
 import org.gradle.api.artifacts.dsl.ArtifactHandler
 import org.gradle.api.artifacts.dsl.DependencyConstraintHandler
 import org.gradle.api.artifacts.dsl.DependencyHandler
+import org.gradle.api.provider.Provider
 import org.gradle.api.tasks.TaskContainer
 import org.gradle.api.tasks.TaskProvider
 

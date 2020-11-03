@@ -21,7 +21,8 @@ class UserGuideLinkTest {
             assertThat(
                 "$it is linked",
                 UserGuideLink.forPlugin(it),
-                notNullValue())
+                notNullValue()
+            )
         }
     }
 
@@ -31,7 +32,8 @@ class UserGuideLinkTest {
             assertThat(
                 "$it is not linked",
                 UserGuideLink.forPlugin(it),
-                nullValue())
+                nullValue()
+            )
         }
     }
 }
@@ -74,9 +76,8 @@ val linkedPlugins =
         "groovy", "groovy-base",
         "help-tasks",
         "idea", "ivy-publish",
-        "jacoco", "java", "java-base", "java-gradle-plugin", "java-lang",
-        "java-library", "java-library-distribution", "junit-test-suite",
-        "jvm-component", "jvm-resources",
+        "jacoco", "java", "java-base", "java-gradle-plugin",
+        "java-library", "java-library-distribution",
         "maven", "maven-publish",
         "microsoft-visual-cpp-compiler",
         "native-component", "native-component-model",
@@ -87,14 +88,17 @@ val linkedPlugins =
         "scala", "scala-base", "signing", "standard-tool-chains",
         "visual-studio",
         "war",
-        "windows-resource-script", "windows-resources")
+        "windows-resource-script", "windows-resources"
+    )
 
 
 val unlinkedPlugins =
     listOf(
         "coffeescript-base", "envjs", "javascript-base", "jshint",
+        "java-lang", "junit-test-suite", "jvm-component", "jvm-resources",
         "language-base", "lifecycle-base",
         "publishing",
         "rhino",
         "scala-lang",
-        "wrapper")
+        "wrapper"
+    )

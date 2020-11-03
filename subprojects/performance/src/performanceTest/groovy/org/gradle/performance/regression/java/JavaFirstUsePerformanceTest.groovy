@@ -16,106 +16,69 @@
 
 package org.gradle.performance.regression.java
 
-import org.apache.commons.io.FileUtils
-import org.gradle.performance.AbstractCrossVersionGradleInternalPerformanceTest
-import org.gradle.performance.categories.SlowPerformanceRegressionTest
-import org.gradle.performance.fixture.BuildExperimentInvocationInfo
-import org.gradle.performance.fixture.BuildExperimentListener
-import org.gradle.performance.fixture.BuildExperimentListenerAdapter
-import org.gradle.performance.measure.MeasuredOperation
-import org.junit.experimental.categories.Category
-import spock.lang.Unroll
+import org.gradle.performance.AbstractCrossVersionPerformanceTest
+import org.gradle.performance.annotations.RunFor
+import org.gradle.performance.annotations.Scenario
+import org.gradle.profiler.mutations.AbstractCleanupMutator
+import org.gradle.profiler.mutations.ClearGradleUserHomeMutator
+import org.gradle.profiler.mutations.ClearProjectCacheMutator
 
-import static org.gradle.performance.generator.JavaTestProject.LARGE_JAVA_MULTI_PROJECT
-import static org.gradle.performance.generator.JavaTestProject.LARGE_JAVA_MULTI_PROJECT_KOTLIN_DSL
-import static org.gradle.performance.generator.JavaTestProject.LARGE_MONOLITHIC_JAVA_PROJECT
+import static org.gradle.performance.annotations.ScenarioType.SLOW
+import static org.gradle.performance.generator.JavaTestProjectGenerator.LARGE_JAVA_MULTI_PROJECT_KOTLIN_DSL
+import static org.gradle.performance.results.OperatingSystem.LINUX
 
-@Category(SlowPerformanceRegressionTest)
-class JavaFirstUsePerformanceTest extends AbstractCrossVersionGradleInternalPerformanceTest {
+@RunFor(
+    @Scenario(type = SLOW, operatingSystems = [LINUX], testProjects = ["largeMonolithicJavaProject", "largeJavaMultiProject", "largeJavaMultiProjectKotlinDsl"])
+)
+class JavaFirstUsePerformanceTest extends AbstractCrossVersionPerformanceTest {
 
-    @Unroll
-    def "first use of #testProject"() {
-        given:
-        runner.testProject = testProject
-        runner.gradleOpts = ["-Xms${testProject.daemonMemory}", "-Xmx${testProject.daemonMemory}"]
-        runner.tasksToRun = ['tasks']
-        runner.runs = runs
-        runner.useDaemon = false
-        runner.targetVersions = ["6.7-20200723220251+0000"]
-        runner.addBuildExperimentListener(new BuildExperimentListenerAdapter() {
-            @Override
-            void afterInvocation(BuildExperimentInvocationInfo invocationInfo, MeasuredOperation operation, BuildExperimentListener.MeasurementCallback measurementCallback) {
-                runner.workingDir.eachDir {
-                    FileUtils.deleteDirectory(new File(it, '.gradle'))
-                    FileUtils.deleteDirectory(new File(it, 'buildSrc/.gradle'))
-                    FileUtils.deleteDirectory(new File(it, 'gradle-user-home'))
-                }
-            }
-        })
-
-        when:
-        def result = runner.run()
-
-        then:
-        result.assertCurrentVersionHasNotRegressed()
-
-        where:
-        testProject                         | runs
-        LARGE_MONOLITHIC_JAVA_PROJECT       | 10
-        LARGE_JAVA_MULTI_PROJECT            | 10
-        LARGE_JAVA_MULTI_PROJECT_KOTLIN_DSL | 5
+    def setup() {
+        runner.targetVersions = ["6.8-20201028230040+0000"]
     }
 
-    @Unroll
-    def "clean checkout of #testProject"() {
+    def "first use"() {
         given:
-        runner.testProject = testProject
-        runner.gradleOpts = ["-Xms${testProject.daemonMemory}", "-Xmx${testProject.daemonMemory}"]
         runner.tasksToRun = ['tasks']
+        runner.runs = (runner.testProject == (LARGE_JAVA_MULTI_PROJECT_KOTLIN_DSL.projectName) ? 5 : 10)
         runner.useDaemon = false
-        runner.targetVersions = ["6.7-20200723220251+0000"]
-        runner.addBuildExperimentListener(new BuildExperimentListenerAdapter() {
-            @Override
-            void afterInvocation(BuildExperimentInvocationInfo invocationInfo, MeasuredOperation operation, BuildExperimentListener.MeasurementCallback measurementCallback) {
-                runner.workingDir.eachDir {
-                    FileUtils.deleteDirectory(new File(it, '.gradle'))
-                    FileUtils.deleteDirectory(new File(it, 'buildSrc/.gradle'))
-                }
-            }
-        })
+        runner.addBuildMutator { invocationSettings ->
+            new ClearGradleUserHomeMutator(invocationSettings.gradleUserHome, AbstractCleanupMutator.CleanupSchedule.BUILD)
+        }
+        runner.addBuildMutator { invocationSettings ->
+            new ClearProjectCacheMutator(invocationSettings.projectDir, AbstractCleanupMutator.CleanupSchedule.BUILD)
+        }
 
         when:
         def result = runner.run()
 
         then:
         result.assertCurrentVersionHasNotRegressed()
-
-        where:
-        testProject                              | _
-        LARGE_MONOLITHIC_JAVA_PROJECT            | _
-        LARGE_JAVA_MULTI_PROJECT                 | _
-        LARGE_JAVA_MULTI_PROJECT_KOTLIN_DSL      | _
     }
 
-    @Unroll
-    def "cold daemon on #testProject"() {
+    def "clean checkout"() {
         given:
-        runner.testProject = testProject
-        runner.gradleOpts = ["-Xms${testProject.daemonMemory}", "-Xmx${testProject.daemonMemory}"]
         runner.tasksToRun = ['tasks']
         runner.useDaemon = false
-        runner.targetVersions = ["6.7-20200723220251+0000"]
+        runner.addBuildMutator { invocationSettings ->
+            new ClearProjectCacheMutator(invocationSettings.projectDir, AbstractCleanupMutator.CleanupSchedule.BUILD)
+        }
 
         when:
         def result = runner.run()
 
         then:
         result.assertCurrentVersionHasNotRegressed()
+    }
 
-        where:
-        testProject                              | _
-        LARGE_MONOLITHIC_JAVA_PROJECT            | _
-        LARGE_JAVA_MULTI_PROJECT                 | _
-        LARGE_JAVA_MULTI_PROJECT_KOTLIN_DSL      | _
+    def "cold daemon"() {
+        given:
+        runner.tasksToRun = ['tasks']
+        runner.useDaemon = false
+
+        when:
+        def result = runner.run()
+
+        then:
+        result.assertCurrentVersionHasNotRegressed()
     }
 }

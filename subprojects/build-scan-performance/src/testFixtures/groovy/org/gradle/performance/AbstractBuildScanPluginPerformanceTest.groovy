@@ -20,32 +20,38 @@ import groovy.json.JsonSlurper
 import org.gradle.integtests.fixtures.executer.IntegrationTestBuildContext
 import org.gradle.performance.fixture.BuildExperimentSpec
 import org.gradle.performance.fixture.BuildScanPerformanceTestRunner
-import org.gradle.performance.fixture.CrossBuildGradleInternalPerformanceTestRunner
-import org.gradle.performance.fixture.GradleInternalBuildExperimentRunner
-import org.gradle.performance.fixture.GradleSessionProvider
+import org.gradle.performance.fixture.GradleBuildExperimentRunner
+import org.gradle.performance.fixture.GradleInvocationSpec
+import org.gradle.performance.fixture.PerformanceTestIdProvider
 import org.gradle.performance.measure.Amount
 import org.gradle.performance.measure.MeasuredOperation
 import org.gradle.performance.results.BaselineVersion
 import org.gradle.performance.results.BuildScanResultsStore
 import org.gradle.performance.results.CrossBuildPerformanceResults
+import org.gradle.performance.results.GradleProfilerReporter
+import org.gradle.test.fixtures.file.CleanupTestDirectory
 import org.gradle.test.fixtures.file.TestNameTestDirectoryProvider
 import org.junit.Rule
 import spock.lang.AutoCleanup
 import spock.lang.Shared
 import spock.lang.Specification
 
+@CleanupTestDirectory
 class AbstractBuildScanPluginPerformanceTest extends Specification {
 
     static String incomingDir = "../../incoming"
     @Rule
-    TestNameTestDirectoryProvider tmpDir = new TestNameTestDirectoryProvider(getClass())
+    TestNameTestDirectoryProvider temporaryFolder = new TestNameTestDirectoryProvider(getClass())
+
+    @Rule
+    PerformanceTestIdProvider performanceTestIdProvider = new PerformanceTestIdProvider()
 
     @AutoCleanup
     @Shared
     def resultStore = new BuildScanResultsStore()
 
     protected final IntegrationTestBuildContext buildContext = new IntegrationTestBuildContext()
-    CrossBuildGradleInternalPerformanceTestRunner runner
+    BuildScanPerformanceTestRunner runner
 
     @Shared
     String pluginVersionNumber = resolvePluginVersion()
@@ -56,13 +62,16 @@ class AbstractBuildScanPluginPerformanceTest extends Specification {
         def buildStampJsonData = new JsonSlurper().parse(buildStampJsonFile) as Map<String, ?>
         assert buildStampJsonData.commitId
         def pluginCommitId = buildStampJsonData.commitId as String
-        runner = new BuildScanPerformanceTestRunner(new GradleInternalBuildExperimentRunner(new GradleSessionProvider(buildContext)), resultStore, resultStore, pluginCommitId, buildContext) {
+        def gradleProfilerReporter = new GradleProfilerReporter(temporaryFolder.testDirectory)
+        runner = new BuildScanPerformanceTestRunner(new GradleBuildExperimentRunner(gradleProfilerReporter), resultStore, resultStore, pluginCommitId, buildContext) {
             @Override
             protected void defaultSpec(BuildExperimentSpec.Builder builder) {
                 super.defaultSpec(builder)
-                builder.workingDirectory = tmpDir.testDirectory
+                builder.workingDirectory = temporaryFolder.testDirectory
+                (builder.invocation as GradleInvocationSpec.InvocationBuilder).buildLog(new File(builder.workingDirectory, "build.log"))
             }
         }
+        performanceTestIdProvider.setTestSpec(runner)
     }
 
     private static resolvePluginVersion() {

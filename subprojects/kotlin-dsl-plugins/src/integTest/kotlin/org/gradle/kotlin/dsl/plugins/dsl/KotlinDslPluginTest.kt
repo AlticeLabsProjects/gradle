@@ -1,7 +1,7 @@
 package org.gradle.kotlin.dsl.plugins.dsl
 
 import org.gradle.api.internal.DocumentationRegistry
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.kotlin.dsl.fixtures.AbstractPluginTest
 import org.gradle.kotlin.dsl.fixtures.containsMultiLineString
 import org.gradle.kotlin.dsl.fixtures.normalisedPath
@@ -17,7 +17,7 @@ import org.junit.Test
 class KotlinDslPluginTest : AbstractPluginTest() {
 
     @Test
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     fun `warns on unexpected kotlin-dsl plugin version`() {
 
         // The test applies the in-development version of the kotlin-dsl
@@ -26,9 +26,11 @@ class KotlinDslPluginTest : AbstractPluginTest() {
         // (see publishedKotlinDslPluginsVersion in kotlin-dsl.gradle.kts)
         withKotlinDslPlugin()
 
-        withDefaultSettings().appendText("""
+        withDefaultSettings().appendText(
+            """
             rootProject.name = "forty-two"
-        """)
+            """
+        )
 
         val appliedKotlinDslPluginsVersion = futurePluginVersions["org.gradle.kotlin.kotlin-dsl"]
         build("help").apply {
@@ -39,12 +41,14 @@ class KotlinDslPluginTest : AbstractPluginTest() {
     }
 
     @Test
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     fun `gradle kotlin dsl api dependency is added`() {
 
         withKotlinDslPlugin()
 
-        withFile("src/main/kotlin/code.kt", """
+        withFile(
+            "src/main/kotlin/code.kt",
+            """
 
             // src/main/kotlin
             import org.gradle.kotlin.dsl.GradleDsl
@@ -52,7 +56,8 @@ class KotlinDslPluginTest : AbstractPluginTest() {
             // src/generated
             import org.gradle.kotlin.dsl.embeddedKotlinVersion
 
-        """)
+            """
+        )
 
         val result = build("classes")
 
@@ -60,10 +65,13 @@ class KotlinDslPluginTest : AbstractPluginTest() {
     }
 
     @Test
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     fun `gradle kotlin dsl api is available for test implementation`() {
 
-        withBuildScript("""
+        assumeNonEmbeddedGradleExecuter() // Requires a Gradle distribution on the test-under-test classpath, but gradleApi() does not offer the full distribution
+
+        withBuildScript(
+            """
 
             plugins {
                 `kotlin-dsl`
@@ -75,9 +83,12 @@ class KotlinDslPluginTest : AbstractPluginTest() {
                 testImplementation("junit:junit:4.13")
             }
 
-        """)
+            """
+        )
 
-        withFile("src/main/kotlin/code.kt", """
+        withFile(
+            "src/main/kotlin/code.kt",
+            """
 
             import org.gradle.api.Plugin
             import org.gradle.api.Project
@@ -90,9 +101,12 @@ class KotlinDslPluginTest : AbstractPluginTest() {
                     }
                 }
             }
-        """)
+            """
+        )
 
-        withFile("src/test/kotlin/test.kt", """
+        withFile(
+            "src/test/kotlin/test.kt",
+            """
 
             import org.gradle.testfixtures.ProjectBuilder
             import org.junit.Test
@@ -107,19 +121,22 @@ class KotlinDslPluginTest : AbstractPluginTest() {
                     }
                 }
             }
-        """)
+            """
+        )
 
         assertThat(
             outputOf("test", "-i"),
-            containsString("Plugin Using Embedded Kotlin "))
+            containsString("Plugin Using Embedded Kotlin ")
+        )
     }
 
     @Test
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     fun `gradle kotlin dsl api is available in test-kit injected plugin classpath`() {
         assumeNonEmbeddedGradleExecuter() // requires a full distribution to run tests with test kit
 
-        withBuildScript("""
+        withBuildScript(
+            """
 
             plugins {
                 `kotlin-dsl`
@@ -142,9 +159,12 @@ class KotlinDslPluginTest : AbstractPluginTest() {
                 }
             }
 
-        """)
+            """
+        )
 
-        withFile("src/main/kotlin/my/code.kt", """
+        withFile(
+            "src/main/kotlin/my/code.kt",
+            """
             package my
 
             import org.gradle.api.*
@@ -155,9 +175,12 @@ class KotlinDslPluginTest : AbstractPluginTest() {
                     println("Plugin Using Embedded Kotlin " + embeddedKotlinVersion)
                 }
             }
-        """)
+            """
+        )
 
-        withFile("src/test/kotlin/test.kt", """
+        withFile(
+            "src/test/kotlin/test.kt",
+            """
 
             import java.io.File
 
@@ -202,20 +225,24 @@ class KotlinDslPluginTest : AbstractPluginTest() {
                 }
             }
 
-        """)
+            """
+        )
 
         assertThat(
             outputOf("test", "-i"),
-            containsString("Plugin Using Embedded Kotlin "))
+            containsString("Plugin Using Embedded Kotlin ")
+        )
     }
 
     @Test
-    @ToBeFixedForInstantExecution
+    @ToBeFixedForConfigurationCache
     fun `sam-with-receiver kotlin compiler plugin is applied to production code`() {
 
         withKotlinDslPlugin()
 
-        withFile("src/main/kotlin/code.kt", """
+        withFile(
+            "src/main/kotlin/code.kt",
+            """
 
             import org.gradle.api.Plugin
             import org.gradle.api.Project
@@ -231,7 +258,8 @@ class KotlinDslPluginTest : AbstractPluginTest() {
                 }
             }
 
-        """)
+            """
+        )
 
         val result = build("classes")
 
@@ -239,7 +267,7 @@ class KotlinDslPluginTest : AbstractPluginTest() {
     }
 
     @Test
-    @ToBeFixedForInstantExecution(because = "Kotlin Gradle Plugin")
+    @ToBeFixedForConfigurationCache(because = "Kotlin Gradle Plugin")
     fun `by default experimental Kotlin compiler features are enabled and a warning is issued`() {
 
         withBuildExercisingSamConversionForKotlinFunctions()
@@ -248,11 +276,13 @@ class KotlinDslPluginTest : AbstractPluginTest() {
 
             assertThat(
                 output.also(::println),
-                containsMultiLineString("""
+                containsMultiLineString(
+                    """
                     STRING
                     foo
                     bar
-                """)
+                    """
+                )
             )
 
             assertThat(
@@ -268,7 +298,7 @@ class KotlinDslPluginTest : AbstractPluginTest() {
     }
 
     @Test
-    @ToBeFixedForInstantExecution(because = "Kotlin Gradle Plugin")
+    @ToBeFixedForConfigurationCache(because = "Kotlin Gradle Plugin")
     fun `can explicitly disable experimental Kotlin compiler features warning`() {
 
         withBuildExercisingSamConversionForKotlinFunctions(
@@ -279,11 +309,13 @@ class KotlinDslPluginTest : AbstractPluginTest() {
 
             assertThat(
                 output.also(::println),
-                containsMultiLineString("""
+                containsMultiLineString(
+                    """
                     STRING
                     foo
                     bar
-                """)
+                    """
+                )
             )
 
             assertThat(
@@ -311,7 +343,9 @@ class KotlinDslPluginTest : AbstractPluginTest() {
 
         withDefaultSettingsIn("buildSrc")
 
-        withBuildScriptIn("buildSrc", """
+        withBuildScriptIn(
+            "buildSrc",
+            """
 
             plugins {
                 `kotlin-dsl`
@@ -320,9 +354,12 @@ class KotlinDslPluginTest : AbstractPluginTest() {
             $repositoriesBlock
 
             $buildSrcScript
-        """)
+            """
+        )
 
-        withFile("buildSrc/src/main/kotlin/my.kt", """
+        withFile(
+            "buildSrc/src/main/kotlin/my.kt",
+            """
             package my
 
             // Action<T> is a SAM with receiver
@@ -344,15 +381,18 @@ class KotlinDslPluginTest : AbstractPluginTest() {
                     println(toLowerCase())
                 }
             }
-        """)
+            """
+        )
 
-        withBuildScript("""
+        withBuildScript(
+            """
 
             task("test") {
                 doLast { my.test() }
             }
 
-         """)
+            """
+        )
     }
 
     private

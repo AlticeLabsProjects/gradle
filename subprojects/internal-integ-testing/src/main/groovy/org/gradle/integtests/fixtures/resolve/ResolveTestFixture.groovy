@@ -30,7 +30,7 @@ import org.gradle.api.internal.artifacts.DefaultModuleVersionIdentifier
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.result.ComponentSelectionReasonInternal
 import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.TaskAction
-import org.gradle.instantexecution.problems.DisableInstantExecutionFieldTypeCheck
+import org.gradle.configurationcache.problems.DisableConfigurationCacheFieldTypeCheck
 import org.gradle.internal.classloader.ClasspathUtil
 import org.gradle.test.fixtures.file.TestFile
 import org.junit.ComparisonFailure
@@ -805,6 +805,10 @@ allprojects {
             byReason(ComponentSelectionCause.BY_ANCESTOR.defaultReason)
         }
 
+        NodeBuilder byConsistentResolution(String source) {
+            byConstraint("version resolved in configuration ':$source' by consistent resolution")
+        }
+
         /**
          * Marks that this node was selected by the given reason
          */
@@ -865,7 +869,7 @@ class GenerateGraphTask extends DefaultTask {
     @Internal
     File outputFile
     @Internal
-    @DisableInstantExecutionFieldTypeCheck
+    @DisableConfigurationCacheFieldTypeCheck
     Configuration configuration
     @Internal
     boolean buildArtifacts

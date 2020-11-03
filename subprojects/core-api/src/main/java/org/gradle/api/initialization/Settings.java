@@ -18,11 +18,15 @@ package org.gradle.api.initialization;
 
 import org.gradle.StartParameter;
 import org.gradle.api.Action;
+import org.gradle.api.Incubating;
 import org.gradle.api.UnknownProjectException;
 import org.gradle.api.initialization.dsl.ScriptHandler;
+import org.gradle.api.initialization.resolve.DependencyResolutionManagement;
 import org.gradle.api.invocation.Gradle;
 import org.gradle.api.plugins.ExtensionAware;
 import org.gradle.api.plugins.PluginAware;
+import org.gradle.api.provider.Provider;
+import org.gradle.api.provider.ProviderFactory;
 import org.gradle.caching.configuration.BuildCacheConfiguration;
 import org.gradle.internal.HasInternalProtocol;
 import org.gradle.plugin.management.PluginManagementSpec;
@@ -208,6 +212,14 @@ public interface Settings extends PluginAware, ExtensionAware {
     StartParameter getStartParameter();
 
     /**
+     * Provides access to methods to create various kinds of {@link Provider} instances.
+     *
+     * @since 6.8
+     */
+    @Incubating
+    ProviderFactory getProviders();
+
+    /**
      * Returns the {@link Gradle} instance for the current build.
      *
      * @return The Gradle instance. Never returns null.
@@ -281,4 +293,13 @@ public interface Settings extends PluginAware, ExtensionAware {
      * @since 4.6
      */
     void enableFeaturePreview(String name);
+
+    /**
+     * Configures the cross-project dependency resolution aspects
+     * @param dependencyResolutionConfiguration the configuration
+     *
+     * @since 6.8
+     */
+    @Incubating
+    void dependencyResolutionManagement(Action<? super DependencyResolutionManagement> dependencyResolutionConfiguration);
 }

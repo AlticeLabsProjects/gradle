@@ -25,6 +25,8 @@ import org.gradle.api.specs.Spec;
 import org.gradle.api.specs.Specs;
 import org.gradle.api.tasks.util.PatternSet;
 import org.gradle.internal.deprecation.DeprecationLogger;
+import org.gradle.internal.service.scopes.Scope;
+import org.gradle.internal.service.scopes.ServiceScope;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -40,6 +42,7 @@ import java.util.Map;
  * used, no matter which other includes and excludes a {@link PatternSet} has. For an
  * implementation that caches all other patterns as well, see {@link CachingPatternSpecFactory}.
  */
+@ServiceScope(Scope.Global.class)
 public class PatternSpecFactory {
     public static final PatternSpecFactory INSTANCE = new PatternSpecFactory();
     private String[] previousDefaultExcludes;
@@ -100,7 +103,7 @@ public class PatternSpecFactory {
             .withContext(String.format("Default excludes changed from %s to %s.", sortedExcludesFromSettings, sortedNewExcludes))
             .withAdvice("Configure default excludes in the settings script instead.")
             .willBeRemovedInGradle7()
-            .withUserManual("working_with_files", "sec:change_ant_excludes")
+            .withUpgradeGuideSection(6, "changing_default_excludes_during_the_execution_phase")
             .nagUser();
     }
 

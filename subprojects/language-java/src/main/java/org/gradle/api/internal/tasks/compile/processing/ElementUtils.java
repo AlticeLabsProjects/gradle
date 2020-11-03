@@ -60,6 +60,14 @@ public class ElementUtils {
             current = parent;
             parent = current.getEnclosingElement();
         }
+        String name = getElementName(current);
+        if (name != null) {
+            return name;
+        }
+        throw new IllegalArgumentException("Unexpected element " + originatingElement);
+    }
+
+    public static String getElementName(Element current) {
         if (current instanceof PackageElement) {
             String packageName = ((PackageElement) current).getQualifiedName().toString();
             if (packageName.isEmpty()) {
@@ -69,8 +77,19 @@ public class ElementUtils {
             }
         }
         if (current instanceof TypeElement) {
-            return ((TypeElement) current).getQualifiedName().toString();
+            TypeElement typeElement = (TypeElement) current;
+            return typeElement.getQualifiedName().toString();
         }
-        throw new IllegalArgumentException("Unexpected element " + originatingElement);
+        return null;
+    }
+
+    public static Element getTopLevelType(Element originatingElement) {
+        Element current = originatingElement;
+        Element parent = originatingElement;
+        while (parent != null && !(parent instanceof PackageElement)) {
+            current = parent;
+            parent = current.getEnclosingElement();
+        }
+        return current;
     }
 }

@@ -16,7 +16,7 @@
 
 package org.gradle.internal.watch
 
-import org.gradle.integtests.fixtures.ToBeFixedForInstantExecution
+import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.test.fixtures.server.http.BlockingHttpServer
 import org.junit.Rule
 
@@ -24,12 +24,18 @@ class ChangesDuringTheBuildFileSystemWatchingIntegrationTest extends AbstractFil
     @Rule
     BlockingHttpServer server = new BlockingHttpServer()
 
+    VerboseVfsLogAccessor vfsLogs
+
     def setup() {
         executer.requireDaemon()
+        executer.beforeExecute {
+            vfsLogs = enableVerboseVfsLogs()
+        }
         server.start()
         buildFile << """
             import org.gradle.internal.file.FileType
             import org.gradle.internal.snapshot.*
+            import org.gradle.internal.vfs.*
 
             task waitForUserChanges {
                 doLast {
@@ -39,9 +45,9 @@ class ChangesDuringTheBuildFileSystemWatchingIntegrationTest extends AbstractFil
 
             gradle.buildFinished {
                 def projectRoot = project.projectDir.absolutePath
-                def root = gradle.services.get(AtomicSnapshotHierarchyReference)
+                def vfs = gradle.services.get(VirtualFileSystem)
                 int filesInVfs = 0
-                root.get().visitSnapshotRoots { snapshot ->
+                vfs.rootReference.getRoot().visitSnapshotRoots { snapshot ->
                     snapshot.accept(new FileSystemSnapshotVisitor() {
                         @Override
                         void visitFile(CompleteFileSystemLocationSnapshot fileSnapshot) {
@@ -61,7 +67,7 @@ class ChangesDuringTheBuildFileSystemWatchingIntegrationTest extends AbstractFil
         """
     }
 
-    @ToBeFixedForInstantExecution(because = "Cannot use buildFinished listener")
+    @ToBeFixedForConfigurationCache(because = "Cannot use buildFinished listener")
     def "detects input file change just before the task is executed"() {
         def inputFile = file("input.txt")
         buildFile << """
@@ -79,7 +85,7 @@ class ChangesDuringTheBuildFileSystemWatchingIntegrationTest extends AbstractFil
         """
 
         when:
-        runWithRetentionAndDoChangesWhen("consumer", "userInput") {
+        runWithFileSystemWatchingAndMakeChangesWhen("consumer", "userInput") {
             inputFile.text = "initial"
             waitForChangesToBePickedUp()
         }
@@ -89,17 +95,17 @@ class ChangesDuringTheBuildFileSystemWatchingIntegrationTest extends AbstractFil
         projectFilesInVfs >= 1
 
         when:
-        runWithRetentionAndDoChangesWhen("consumer", "userInput") {
+        runWithFileSystemWatchingAndMakeChangesWhen("consumer", "userInput") {
             inputFile.text = "changed"
             waitForChangesToBePickedUp()
         }
         then:
         executedAndNotSkipped(":consumer")
-        receivedFileSystemEventsInCurrentBuild >= 1
+        vfsLogs.receivedFileSystemEventsInCurrentBuild >= 1
         projectFilesInVfs == 2
     }
 
-    @ToBeFixedForInstantExecution(because = "Cannot use buildFinished listener")
+    @ToBeFixedForConfigurationCache(because = "Cannot use buildFinished listener")
     def "detects input file change after the task has been executed"() {
         def inputFile = file("input.txt")
         def outputFile = file("build/output.txt")
@@ -120,7 +126,7 @@ class ChangesDuringTheBuildFileSystemWatchingIntegrationTest extends AbstractFil
 
         when:
         inputFile.text = "initial"
-        runWithRetentionAndDoChangesWhen("waitForUserChanges", "userInput") {
+        runWithFileSystemWatchingAndMakeChangesWhen("waitForUserChanges", "userInput") {
             inputFile.text = "changed"
             waitForChangesToBePickedUp()
         }
@@ -130,14 +136,14 @@ class ChangesDuringTheBuildFileSystemWatchingIntegrationTest extends AbstractFil
         projectFilesInVfs == 1
 
         when:
-        runWithRetentionAndDoChangesWhen("waitForUserChanges", "userInput") {
+        runWithFileSystemWatchingAndMakeChangesWhen("waitForUserChanges", "userInput") {
             inputFile.text = "changedAgain"
             waitForChangesToBePickedUp()
         }
         then:
         executedAndNotSkipped(":consumer")
         outputFile.text == "changed"
-        receivedFileSystemEventsInCurrentBuild >= 1
+        vfsLogs.receivedFileSystemEventsInCurrentBuild >= 1
         projectFilesInVfs == 1
 
         when:
@@ -149,7 +155,7 @@ class ChangesDuringTheBuildFileSystemWatchingIntegrationTest extends AbstractFil
         projectFilesInVfs == 2
     }
 
-    private void runWithRetentionAndDoChangesWhen(String task, String expectedCall, Closure action) {
+    private void runWithFileSystemWatchingAndMakeChangesWhen(String task, String expectedCall, Closure action) {
         def handle = withWatchFs().executer.withTasks(task).start()
         def userInput = server.expectAndBlock(expectedCall)
         userInput.waitForAllPendingCalls()
@@ -162,6 +168,5 @@ class ChangesDuringTheBuildFileSystemWatchingIntegrationTest extends AbstractFil
         def retainedInformation = result.getOutputLineThatContains("Project files in VFS: ")
         def numberMatcher = retainedInformation =~ /Project files in VFS: (\d+)/
         return numberMatcher[0][1] as int
-
     }
 }

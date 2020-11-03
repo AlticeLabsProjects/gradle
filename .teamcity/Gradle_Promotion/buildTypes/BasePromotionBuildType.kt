@@ -17,6 +17,7 @@
 package Gradle_Promotion.buildTypes
 
 import common.Os
+import common.requiresNoEc2Agent
 import common.requiresOs
 import jetbrains.buildServer.configs.kotlin.v2019_2.BuildType
 import jetbrains.buildServer.configs.kotlin.v2019_2.CheckoutMode
@@ -33,7 +34,8 @@ abstract class BasePromotionBuildType(vcsRoot: GitVcsRoot, cleanCheckout: Boolea
         }
 
         requirements {
-            requiresOs(Os.linux)
+            requiresOs(Os.LINUX)
+            requiresNoEc2Agent()
         }
 
         params {

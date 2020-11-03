@@ -15,7 +15,6 @@
  */
 package org.gradle.api.internal.artifacts.ivyservice;
 
-import org.gradle.api.Transformer;
 import org.gradle.api.internal.filestore.DefaultArtifactIdentifierFileStore;
 import org.gradle.cache.CacheBuilder;
 import org.gradle.cache.CacheRepository;
@@ -36,6 +35,7 @@ import org.gradle.internal.serialize.Serializer;
 
 import javax.annotation.Nullable;
 import java.io.Closeable;
+import java.util.function.Function;
 
 import static org.gradle.cache.internal.LeastRecentlyUsedCacheCleanup.DEFAULT_MAX_AGE_IN_DAYS_FOR_EXTERNAL_CACHE_ENTRIES;
 import static org.gradle.cache.internal.filelock.LockOptionsBuilder.mode;
@@ -57,7 +57,7 @@ public class WritableArtifactCacheLockingManager implements ArtifactCacheLocking
     }
 
     private CleanupAction createCleanupAction(ArtifactCacheMetadata cacheMetaData, FileAccessTimeJournal fileAccessTimeJournal, UsedGradleVersions usedGradleVersions) {
-        long maxAgeInDays = DEFAULT_MAX_AGE_IN_DAYS_FOR_EXTERNAL_CACHE_ENTRIES;
+        long maxAgeInDays = Long.getLong("org.gradle.internal.cleanup.external.max.age", DEFAULT_MAX_AGE_IN_DAYS_FOR_EXTERNAL_CACHE_ENTRIES);
         return CompositeCleanupAction.builder()
                 .add(UnusedVersionsCacheCleanup.create(CacheLayout.ROOT.getName(), CacheLayout.ROOT.getVersionMapping(), usedGradleVersions))
                 .add(cacheMetaData.getExternalResourcesStoreDirectory(),
@@ -117,7 +117,7 @@ public class WritableArtifactCacheLockingManager implements ArtifactCacheLocking
         }
 
         @Override
-        public V get(final K key, final Transformer<? extends V, ? super K> producer) {
+        public V get(final K key, final Function<? super K, ? extends V> producer) {
             return cache.useCache(() -> persistentCache.get(key, producer));
         }
 

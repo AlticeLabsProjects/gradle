@@ -20,11 +20,11 @@ import java.util.Properties
 plugins {
     java
     `kotlin-dsl` apply false
-    id("org.gradle.kotlin-dsl.ktlint-convention") version "0.5.0" apply false
+    id("org.gradle.kotlin-dsl.ktlint-convention") version "0.6.0" apply false
 }
 
 subprojects {
-    if (name != "buildPlatform") {
+    if (name != "build-platform") {
         apply(plugin = "java-library")
 
 
@@ -42,7 +42,7 @@ subprojects {
         }
 
         dependencies {
-            "api"(platform(project(":buildPlatform")))
+            "api"(platform(project(":build-platform")))
             implementation(gradleApi())
         }
 
@@ -109,7 +109,7 @@ allprojects {
 
 dependencies {
     subprojects.forEach {
-        if (it.name != "buildPlatform") {
+        if (it.name != "build-platform") {
             runtimeOnly(project(it.path))
         }
     }
@@ -211,8 +211,8 @@ fun Project.applyGroovyProjectConventions() {
         testImplementation("org.spockframework:spock-core:1.3-groovy-2.5") {
             exclude(group = "org.codehaus.groovy")
         }
-        testImplementation("net.bytebuddy:byte-buddy:1.8.21")
-        testImplementation("org.objenesis:objenesis:2.6")
+        testImplementation("net.bytebuddy:byte-buddy")
+        testImplementation("org.objenesis:objenesis")
     }
 
     tasks.withType<GroovyCompile>().configureEach {

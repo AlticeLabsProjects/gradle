@@ -16,9 +16,6 @@
 
 package org.gradle.performance.results;
 
-import com.google.common.base.Function;
-import com.google.common.collect.Lists;
-
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -26,23 +23,23 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class CrossVersionPerformanceTestHistory implements PerformanceTestHistory {
-    private final String name;
+    private final PerformanceExperiment experiment;
     private final List<String> versions;
     private final List<String> branches;
     private final List<CrossVersionPerformanceResults> newestFirst;
     private List<CrossVersionPerformanceResults> oldestFirst;
     private List<String> knownVersions;
 
-    public CrossVersionPerformanceTestHistory(String name, List<String> versions, List<String> branches, List<CrossVersionPerformanceResults> newestFirst) {
-        this.name = name;
+    public CrossVersionPerformanceTestHistory(PerformanceExperiment experiment, List<String> versions, List<String> branches, List<CrossVersionPerformanceResults> newestFirst) {
+        this.experiment = experiment;
         this.versions = versions;
         this.branches = branches;
         this.newestFirst = newestFirst;
     }
 
     @Override
-    public String getDisplayName() {
-        return name;
+    public PerformanceExperiment getExperiment() {
+        return experiment;
     }
 
     public List<String> getBaselineVersions() {
@@ -91,45 +88,47 @@ public class CrossVersionPerformanceTestHistory implements PerformanceTestHistor
         if (newestFirst.isEmpty()) {
             return Collections.emptyList();
         }
-        final CrossVersionPerformanceResults mostRecent = newestFirst.get(0);
-        return Lists.transform(getKnownVersions(), (Function<String, ScenarioDefinition>) input -> new ScenarioDefinition() {
-            @Override
-            public String getDisplayName() {
-                return input;
-            }
+        CrossVersionPerformanceResults mostRecent = newestFirst.get(0);
+        return getKnownVersions().stream()
+            .map(input -> new ScenarioDefinition() {
+                @Override
+                public String getDisplayName() {
+                    return input;
+                }
 
-            @Override
-            public String getTestProject() {
-                return mostRecent.getTestProject();
-            }
+                @Override
+                public String getTestProject() {
+                    return mostRecent.getTestProject();
+                }
 
-            @Override
-            public List<String> getTasks() {
-                return mostRecent.getTasks();
-            }
+                @Override
+                public List<String> getTasks() {
+                    return mostRecent.getTasks();
+                }
 
-            @Override
-            public List<String> getCleanTasks() {
-                return mostRecent.getCleanTasks();
-            }
+                @Override
+                public List<String> getCleanTasks() {
+                    return mostRecent.getCleanTasks();
+                }
 
-            @Override
-            public List<String> getArgs() {
-                return mostRecent.getArgs();
-            }
+                @Override
+                public List<String> getArgs() {
+                    return mostRecent.getArgs();
+                }
 
-            @Nullable
-            @Override
-            public List<String> getGradleOpts() {
-                return mostRecent.getGradleOpts();
-            }
+                @Nullable
+                @Override
+                public List<String> getGradleOpts() {
+                    return mostRecent.getGradleOpts();
+                }
 
-            @Nullable
-            @Override
-            public Boolean getDaemon() {
-                return mostRecent.getDaemon();
-            }
-        });
+                @Nullable
+                @Override
+                public Boolean getDaemon() {
+                    return mostRecent.getDaemon();
+                }
+            })
+            .collect(Collectors.toList());
     }
 
     @Override
